@@ -1,0 +1,394 @@
+@import "tailwindcss";
+
+:root {
+  /* Backgrounds — v2 warm graphite */
+  --bg-base:    #111012;
+  --bg-surface: #1A1820;
+  --bg-card:    #201D26;
+  --bg-hover:   #2A2633;
+  --bg-input:   #0D0B10;
+  --bg-inset:   #0D0B10;
+
+  /* Borders — solid hex, not rgba */
+  --border:        #2E2A38;
+  --border-strong: #3D3848;
+
+  /* Accent — periwinkle violet: 主操作、当前激活、关键提醒 */
+  --accent:       #9D8EFF;
+  --accent-2:     #7060E8;
+  --accent-light:  rgba(157,142,255,0.12);
+  --accent-glow:   rgba(157,142,255,0.08);
+  --accent-border: rgba(157,142,255,0.28);
+
+  /* Text */
+  --text-primary:   #F0EDF8;
+  --text-secondary: #8A869C;
+  --text-muted:     #5A5670;
+
+  /* Semantic */
+  --green:        #34D399;
+  --green-bg:     rgba(52,211,153,0.07);
+  --green-border: rgba(52,211,153,0.20);
+  --amber:        #FBBF24;
+  --amber-bg:     rgba(251,191,36,0.07);
+  --amber-border: rgba(251,191,36,0.22);
+  --red:          #F87171;
+  --red-bg:       rgba(248,113,113,0.07);
+  --red-border:   rgba(248,113,113,0.20);
+  --blue:         #60A5FA;
+
+  /* Teal — 上下文深度、索引进度、工具连接等系统状态 */
+  --teal:        #2DD4BF;
+  --teal-light:  rgba(45,212,191,0.10);
+  --teal-border: rgba(45,212,191,0.22);
+
+  /* Cyan — 脑图、信息图表 */
+  --cyan:        #0891b2;
+  --cyan-bg:     rgba(8,145,178,0.07);
+
+  /* Archive — 待处理、建议复盘、需要更新摘要等温和提醒 */
+  --archive:       #D6A24A;
+  --archive-light: rgba(214,162,74,0.12);
+
+  /* Shadows — 暗色界面用 border 替代层次，box-shadow 只用于浮层 */
+  --shadow-sm: none;
+  --shadow:    none;
+  --shadow-lg: 0 0 0 1px var(--border), 0 8px 24px rgba(0,0,0,0.4);
+
+  /* Code block */
+  --code-bg:   #0D0B10;
+  --code-text: #C9D1E9;
+
+  /* Typography — 双命名兼容旧引用 */
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --font-sans: -apple-system, 'PingFang SC', 'SF Pro Display', 'Inter', system-ui, sans-serif;
+  --mono: var(--font-mono);
+  --sans: var(--font-sans);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    /* Backgrounds */
+    --bg-base:    #F6F6FB;
+    --bg-surface: #FFFFFF;
+    --bg-card:    #FAFAFD;
+    --bg-hover:   #EFEFF8;
+    --bg-input:   #F2F2F8;
+    --bg-inset:   #F2F2F8;
+
+    /* Borders */
+    --border:        rgba(0,0,0,0.08);
+    --border-strong: rgba(0,0,0,0.15);
+
+    /* Accent */
+    --accent:       #7060E8;
+    --accent-2:     #5A4DD6;
+    --accent-light:  rgba(112,96,232,0.10);
+    --accent-glow:   rgba(112,96,232,0.07);
+    --accent-border: rgba(112,96,232,0.28);
+
+    /* Text */
+    --text-primary:   #0E0F1C;
+    --text-secondary: #525879;
+    --text-muted:     #9BA3C0;
+
+    /* Semantic */
+    --green:        #059669;
+    --green-bg:     rgba(5,150,105,0.07);
+    --green-border: rgba(5,150,105,0.20);
+    --amber:        #D97706;
+    --amber-bg:     rgba(217,119,6,0.07);
+    --amber-border: rgba(217,119,6,0.22);
+    --red:          #DC2626;
+    --red-bg:       rgba(220,38,38,0.06);
+    --red-border:   rgba(220,38,38,0.18);
+    --blue:         #2563EB;
+
+    /* Teal */
+    --teal-border: rgba(45,212,191,0.22);
+
+    /* Shadows — subtle on white */
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+    --shadow:    0 4px 12px rgba(0,0,0,0.10);
+    --shadow-lg: 0 0 0 1px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.12);
+
+    /* Code block */
+    --code-bg:   #EDEDF8;
+    --code-text: #2C2F6B;
+  }
+}
+
+/* Explicit theme overrides — class-based specificity beats :root + media query */
+html.theme-dark {
+  --bg-base:    #111012;
+  --bg-surface: #1A1820;
+  --bg-card:    #201D26;
+  --bg-hover:   #2A2633;
+  --bg-input:   #0D0B10;
+  --bg-inset:   #0D0B10;
+  --border:        #2E2A38;
+  --border-strong: #3D3848;
+  --accent:       #9D8EFF;
+  --accent-2:     #7060E8;
+  --accent-light:  rgba(157,142,255,0.12);
+  --accent-glow:   rgba(157,142,255,0.08);
+  --accent-border: rgba(157,142,255,0.28);
+  --text-primary:   #F0EDF8;
+  --text-secondary: #8A869C;
+  --text-muted:     #5A5670;
+  --green:        #34D399;
+  --green-bg:     rgba(52,211,153,0.07);
+  --green-border: rgba(52,211,153,0.20);
+  --amber:        #FBBF24;
+  --amber-bg:     rgba(251,191,36,0.07);
+  --amber-border: rgba(251,191,36,0.22);
+  --red:          #F87171;
+  --red-bg:       rgba(248,113,113,0.07);
+  --red-border:   rgba(248,113,113,0.20);
+  --blue:         #60A5FA;
+  --teal:        #2DD4BF;
+  --teal-light:  rgba(45,212,191,0.10);
+  --teal-border: rgba(45,212,191,0.22);
+  --shadow-sm: none;
+  --shadow:    none;
+  --shadow-lg: 0 0 0 1px var(--border), 0 8px 24px rgba(0,0,0,0.4);
+  --code-bg:   #0D0B10;
+  --code-text: #C9D1E9;
+}
+
+html.theme-light {
+  --bg-base:    #F6F6FB;
+  --bg-surface: #FFFFFF;
+  --bg-card:    #FAFAFD;
+  --bg-hover:   #EFEFF8;
+  --bg-input:   #F2F2F8;
+  --bg-inset:   #F2F2F8;
+  --border:        rgba(0,0,0,0.08);
+  --border-strong: rgba(0,0,0,0.15);
+  --accent:       #7060E8;
+  --accent-2:     #5A4DD6;
+  --accent-light:  rgba(112,96,232,0.10);
+  --accent-glow:   rgba(112,96,232,0.07);
+  --accent-border: rgba(112,96,232,0.28);
+  --text-primary:   #0E0F1C;
+  --text-secondary: #525879;
+  --text-muted:     #9BA3C0;
+  --green:        #059669;
+  --green-bg:     rgba(5,150,105,0.07);
+  --green-border: rgba(5,150,105,0.20);
+  --amber:        #D97706;
+  --amber-bg:     rgba(217,119,6,0.07);
+  --amber-border: rgba(217,119,6,0.22);
+  --red:          #DC2626;
+  --red-bg:       rgba(220,38,38,0.06);
+  --red-border:   rgba(220,38,38,0.18);
+  --blue:         #2563EB;
+  --teal:        #2DD4BF;
+  --teal-light:  rgba(45,212,191,0.10);
+  --teal-border: rgba(45,212,191,0.22);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow:    0 4px 12px rgba(0,0,0,0.10);
+  --shadow-lg: 0 0 0 1px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.12);
+  --code-bg:   #EDEDF8;
+  --code-text: #2C2F6B;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  text-align: left;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* 保留 .glass 类名防止 JSX 报错，去掉 backdrop-filter */
+.glass {
+  /* backdrop-filter removed per design spec: 消费类 AI 应用标配，影响性能 */
+}
+
+/* Gradient text — only for brand logo */
+.gradient-text {
+  background: linear-gradient(90deg, var(--accent), #C4B8FF);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Mono numbers — data dashboard feel */
+.mono-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.02em;
+}
+
+/* System status chip — teal, mono, compact */
+.system-chip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  color: var(--teal);
+  background: var(--teal-light);
+  border: 1px solid rgba(45,212,191,0.22);
+  border-radius: 4px;
+  padding: 2px 6px;
+  display: inline-block;
+}
+
+/* Context scan animation — teal scan line, only when active */
+@keyframes scan-y {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100px); }
+}
+
+.context-scan {
+  position: relative;
+  overflow: hidden;
+}
+
+.context-scan::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--teal), transparent);
+  opacity: 0.7;
+  animation: scan-y 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .context-scan::after { animation: none; opacity: 0.25; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.35; transform: scale(0.8); }
+  50%       { opacity: 1;    transform: scale(1);   }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.fade-in {
+  animation: fade-in 0.25s ease-out forwards;
+}
+
+/* ── Markdown rendered content ── */
+.md p { margin: 0 0 10px; }
+.md p:last-child { margin-bottom: 0; }
+.md h1, .md h2, .md h3, .md h4 {
+  font-weight: 700; color: var(--text-primary);
+  margin: 16px 0 8px; line-height: 1.35;
+}
+.md h1 { font-size: 18px; }
+.md h2 { font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+.md h3 { font-size: 14.5px; }
+.md h4 { font-size: 14px; }
+.md ul, .md ol { padding-left: 20px; margin: 8px 0 10px; }
+.md li { margin-bottom: 5px; line-height: 1.7; }
+.md li > ul, .md li > ol { margin: 4px 0; }
+.md strong { font-weight: 700; color: var(--text-primary); }
+.md em { font-style: italic; color: var(--text-secondary); }
+.md code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  background: var(--accent-light);
+  border: 1px solid var(--accent-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--accent);
+}
+.md pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin: 10px 0;
+}
+.md pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  color: var(--code-text);
+}
+.md blockquote {
+  border-left: 2px solid var(--accent);
+  margin: 10px 0;
+  padding: 6px 14px;
+  color: var(--text-secondary);
+  background: var(--accent-glow);
+  border-radius: 0 6px 6px 0;
+}
+.md table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+  margin: 12px 0;
+}
+.md th, .md td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+}
+.md th {
+  background: var(--bg-hover);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.md a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.md hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 14px 0;
+}

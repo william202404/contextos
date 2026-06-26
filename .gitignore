@@ -1,0 +1,39 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Release artifacts
+release/
+
+# Temp scripts & Claude planning files
+scripts/
+findings.md
+progress.md
+session_notes.md
+task_plan.md
+verify-settings.mjs
+
+# Stray build output in root
+index-*.css
+index-*.js
