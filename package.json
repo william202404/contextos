@@ -9,6 +9,8 @@
     "dev:electron": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "vite build",
     "build:mac": "vite build && electron-builder --mac",
+    "build:win": "vite build && electron-builder --win",
+    "build:linux": "vite build && electron-builder --linux",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -21,7 +23,9 @@
     "files": [
       "dist/**",
       "electron/**",
-      "build/icon.icns"
+      "build/icon.icns",
+      "build/icon.ico",
+      "build/icon.png"
     ],
     "mac": {
       "target": [
@@ -38,6 +42,15 @@
     },
     "dmg": {
       "title": "ContextOS"
+    },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64", "arm64"] }],
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "icon": "build/icon.png",
+      "category": "Office"
     }
   },
   "dependencies": {

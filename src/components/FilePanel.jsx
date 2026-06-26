@@ -10,7 +10,7 @@ const FILE_ICONS = {
   pdf:       { Icon: FileArchive, color: 'var(--red)', bg: 'var(--red-bg)' },
 }
 
-export default function FilePanel({ project, files, messages = [], tokenPercent = 0, onGenerateSummary, onSummaryEdit, onKnowledgeEdit, onClose, memory, reflectionRunning, onMemoryEdit, onReflect }) {
+export default function FilePanel({ project, files, messages = [], tokenPercent = 0, onGenerateSummary, onSummaryEdit, onKnowledgeEdit, onConsolidateKnowledge, onClose, memory, reflectionRunning, onMemoryEdit, onReflect }) {
   const [activeTab, setActiveTab] = useState('files')
   const [summarySubTab, setSummarySubTab] = useState('status') // 'status' | 'knowledge'
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -19,6 +19,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
   const [previewFile, setPreviewFile] = useState(null)
   const [newKnowledge, setNewKnowledge] = useState('')
   const [addingKnowledge, setAddingKnowledge] = useState(false)
+  const [consolidating, setConsolidating] = useState(false)
 
   const aiOutputs = files.filter(f => f.source === 'ai')
   const uploads = files.filter(f => f.source === 'upload')
@@ -228,8 +229,25 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
 
             {summarySubTab === 'knowledge' && (
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                  积累知识 <span style={{ fontSize: 9, fontWeight: 400, textTransform: 'none' }}>（AI 自动提取，只追加不覆盖）</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    积累知识 <span style={{ fontSize: 9, fontWeight: 400, textTransform: 'none' }}>（AI 自动提取）</span>
+                  </div>
+                  {onConsolidateKnowledge && knowledgeCount >= 8 && (
+                    <button
+                      onClick={async () => {
+                        if (consolidating) return
+                        setConsolidating(true)
+                        try { await onConsolidateKnowledge() } finally { setConsolidating(false) }
+                      }}
+                      disabled={consolidating}
+                      style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, padding: '3px 8px', borderRadius: 6, cursor: consolidating ? 'default' : 'pointer', border: '1px solid var(--border)', background: 'var(--bg-card)', color: consolidating ? 'var(--text-muted)' : 'var(--accent)', fontWeight: 500 }}
+                      title="AI 合并重复条目，压缩知识库体积"
+                    >
+                      <Sparkles size={10} />
+                      {consolidating ? '整合中…' : '整合'}
+                    </button>
+                  )}
                 </div>
                 {project?.knowledge ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

@@ -450,3 +450,17 @@ export async function generateKnowledgeUpdate(messages, existingKnowledge = '', 
     })
   })
 }
+
+// 对知识库条目去重整合，条目过多时压缩
+export async function consolidateKnowledge(knowledge, model = DEFAULT_MODEL) {
+  return new Promise((resolve) => {
+    streamMessage({
+      model,
+      systemPrompt: `你是项目知识管理助手。对以下知识库进行整合：合并含义相近的条目、删除明显重复内容、保留关键结论。用相同的 "- [日期] 内容" 格式输出整合后的知识库，日期保留原始日期（有多个相近条目时取最新日期），不输出其他内容。`,
+      messages: [{ role: 'user', content: knowledge }],
+      onChunk: () => {},
+      onDone: (full) => resolve(full.trim() || knowledge),
+      onError: () => resolve(knowledge),
+    })
+  })
+}

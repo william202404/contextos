@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { getProject, saveProject, updateProject, updateConversation, getProjectMessages, saveMessage, deleteMessage, deleteProjectMessages, getProjectFiles, saveFile, getConversation } from '../store/db'
-import { streamMessage, generateProjectMeta, generateKnowledgeUpdate, MODELS, DEFAULT_MODEL, parseArtifacts, stripArtifacts, stripStreamingArtifacts, getOllamaModels, getCompatibleModels, getApiKeys, getCompatibleConfig } from '../lib/llm'
+import { streamMessage, generateProjectMeta, generateKnowledgeUpdate, consolidateKnowledge, MODELS, DEFAULT_MODEL, parseArtifacts, stripArtifacts, stripStreamingArtifacts, getOllamaModels, getCompatibleModels, getApiKeys, getCompatibleConfig } from '../lib/llm'
 import { DEMO_SERVERS, getConnectedServers, getAllServerTools, executeTool } from '../lib/mcp'
 import { getMemory, saveMemory, triggerReflection, calcReflectionScore } from '../lib/memory'
 import { checkTrigger, checkSemanticTrigger } from '../lib/trigger'
@@ -413,6 +413,16 @@ graph TD
     setMessages(messages.slice(0, idx))
     await Promise.all(toDelete.map(m => deleteMessage(m.id)))
     await handleSend(newText)
+  }
+
+  async function handleConsolidateKnowledge() {
+    if (!project?.knowledge) return
+    const consolidated = await consolidateKnowledge(project.knowledge, model)
+    if (consolidated && consolidated !== project.knowledge) {
+      const updated = { ...project, knowledge: consolidated, updatedAt: Date.now() }
+      await saveProject(updated)
+      setProject(updated)
+    }
   }
 
   async function handleExtractKnowledge() {
@@ -1140,6 +1150,7 @@ graph TD
             files={files}
             messages={messages}
             tokenPercent={tokenPercent}
+            onConsolidateKnowledge={handleConsolidateKnowledge}
             onGenerateSummary={handleGenerateSummary}
             onSummaryEdit={async (text) => {
               const updated = { ...project, status: text, updatedAt: Date.now() }

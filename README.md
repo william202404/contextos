@@ -197,10 +197,10 @@ contextos/
 
 ## Roadmap
 
-- [ ] 知识库自动整合（条目过多时触发合并）
-- [ ] 导出项目为 Markdown 文档
-- [ ] SkillHub 社区技能市场
-- [ ] Windows / Linux 支持
+- [x] 知识库自动整合（条目 ≥ 8 时显示「整合」按钮，AI 去重压缩）
+- [x] 导出项目为 Markdown 文档（右侧面板下载按钮）
+- [x] SkillHub 社区技能市场（Electron 直连，Web 降级展示内置技能）
+- [x] Windows / Linux 支持（`npm run build:win` / `npm run build:linux`）
 - [ ] 多设备同步（可选云端）
 
 ---
