@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { getProject, saveProject, updateProject, updateConversation, getProjectMessages, saveMessage, deleteMessage, deleteProjectMessages, getProjectFiles, saveFile, getConversation } from '../store/db'
+import { getProject, saveProject, updateProject, updateConversation, getProjectMessages, getConvMessages, getProjectConversations, saveConversation, saveMessage, deleteMessage, deleteProjectMessages, getProjectFiles, saveFile, getConversation } from '../store/db'
 import { streamMessage, generateProjectMeta, generateKnowledgeUpdate, consolidateKnowledge, MODELS, DEFAULT_MODEL, parseArtifacts, stripArtifacts, stripStreamingArtifacts, getOllamaModels, getCompatibleModels, getApiKeys, getCompatibleConfig } from '../lib/llm'
 import { DEMO_SERVERS, getConnectedServers, getAllServerTools, executeTool } from '../lib/mcp'
 import { getMemory, saveMemory, triggerReflection, calcReflectionScore } from '../lib/memory'
@@ -60,6 +60,9 @@ export default function ProjectChat() {
   const [knowledgeSuggestion, setKnowledgeSuggestion] = useState(false)
   const [extractingKnowledge, setExtractingKnowledge] = useState(false)
   const [showSkillPicker, setShowSkillPicker] = useState(false)
+  const [projectThreads, setProjectThreads] = useState([])
+
+  const threadId = searchParams.get('thread') || null
 
   const messagesEndRef = useRef(null)
   const abortRef = useRef(null)
@@ -123,18 +126,26 @@ export default function ProjectChat() {
         }).catch(() => {})
       }
     }
-  }, [id])
+  }, [id, threadId])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingText])
 
   async function loadData() {
-    const [proj, msgs, fls] = await Promise.all([
+    setMessages([])
+    setStreaming(false)
+    setStreamingText('')
+    setError('')
+    setTriggerShown(false)
+    setKnowledgeSuggestion(false)
+    const [proj, msgs, fls, threads] = await Promise.all([
       getProject(id),
-      getProjectMessages(id),
+      threadId ? getConvMessages(threadId) : getProjectMessages(id),
       getProjectFiles(id),
+      getProjectConversations(id),
     ])
+    setProjectThreads(threads)
     if (proj) {
       setProject(proj)
       setModel(proj.model || DEFAULT_MODEL)
@@ -191,11 +202,20 @@ export default function ProjectChat() {
     const userMsg = {
       id: crypto.randomUUID(),
       projectId: id,
+      ...(threadId && { convId: threadId }),
       role: 'user',
       content: text,
       timestamp: Date.now(),
     }
     await saveMessage(userMsg)
+
+    // Auto-title thread from first user message
+    if (threadId && messages.length === 0) {
+      const title = text.trim().slice(0, 28) + (text.trim().length > 28 ? '…' : '')
+      updateConversation(threadId, { title, updatedAt: Date.now() })
+      setProjectThreads(prev => prev.map(t => t.id === threadId ? { ...t, title } : t))
+    }
+
     const updatedMessages = [...messages, userMsg]
     setMessages(updatedMessages)
     // Keep new message visible when paginating
@@ -330,6 +350,7 @@ graph TD
         const assistantMsg = {
           id: crypto.randomUUID(),
           projectId: id,
+          ...(threadId && { convId: threadId }),
           role: 'assistant',
           content: cleanContent,
           artifacts,
@@ -347,6 +368,13 @@ graph TD
         const updated = { ...project, updatedAt: now }
         await saveProject(updated)
         setProject(updated)
+
+        // Update thread preview on each AI reply
+        if (threadId) {
+          const preview = cleanContent.replace(/\s+/g, ' ').trim().slice(0, 80)
+          updateConversation(threadId, { preview, updatedAt: now })
+          setProjectThreads(prev => prev.map(t => t.id === threadId ? { ...t, preview, updatedAt: now } : t))
+        }
 
         // 反思触发：每满 5 条 AI 回复，评分 ≥ 60 则后台触发
         const allMsgs = [...updatedMessages, assistantMsg]
@@ -622,6 +650,22 @@ graph TD
     }
   }
 
+  async function handleNewThread() {
+    if (project?.isTemp) return
+    const now = Date.now()
+    const newThread = {
+      id: crypto.randomUUID(),
+      projectId: id,
+      title: '新对话',
+      preview: '',
+      createdAt: now,
+      updatedAt: now,
+    }
+    await saveConversation(newThread)
+    setProjectThreads(prev => [newThread, ...prev])
+    navigate(`/project/${id}?thread=${newThread.id}`)
+  }
+
   // 从消息字符数估算 token 用量（1 token ≈ 2.5 中文字符，基准 100K token 窗口）
   const estimatedChars = messages.reduce((sum, m) => sum + (m.content?.length || 0), 0)
   const TOKEN_WINDOW = 200000
@@ -763,16 +807,29 @@ graph TD
         }}>
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 8px 4px' }}>
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '0 8px', marginBottom: 6 }}>
-              本项目对话
+              对话列表
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 5, background: 'var(--bg-hover)' }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0, display: 'inline-block' }} />
-              <span style={{ flex: 1, fontSize: 11, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
-                {project.name}
-              </span>
-            </div>
+
+            {/* Default thread (legacy / main messages, no ?thread param) */}
+            <SidebarThread
+              label={project.name}
+              isActive={!threadId}
+              onClick={() => navigate(`/project/${id}`)}
+            />
+
+            {/* Named threads */}
+            {projectThreads.map(t => (
+              <SidebarThread
+                key={t.id}
+                label={t.title || '新对话'}
+                preview={t.preview}
+                isActive={threadId === t.id}
+                onClick={() => navigate(`/project/${id}?thread=${t.id}`)}
+              />
+            ))}
+
             <button
-              onClick={() => navigate(`/project/${crypto.randomUUID()}`)}
+              onClick={handleNewThread}
               style={{ display: 'flex', alignItems: 'center', gap: 5, width: '100%', marginTop: 4, padding: '5px 8px', borderRadius: 5, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text-muted)', transition: 'all 0.15s', textAlign: 'left' }}
               onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}
@@ -780,6 +837,7 @@ graph TD
               <span style={{ fontSize: 14, lineHeight: 1, marginTop: -1 }}>+</span>
               <span>新建对话</span>
             </button>
+
             <div style={{ height: 1, background: 'var(--border)', margin: '10px 8px 6px' }} />
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '0 8px', marginBottom: 4 }}>
               导航
@@ -1366,6 +1424,46 @@ function SkillPickerPopover({ skills, activeSkillId, onSelect, onClear, onClose 
           </button>
         </>
       )}
+    </div>
+  )
+}
+
+function SidebarThread({ label, preview, isActive, onClick }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: 6,
+        padding: '5px 8px', borderRadius: 5, cursor: 'pointer',
+        background: isActive ? 'var(--bg-hover)' : hovered ? 'var(--bg-hover)' : 'none',
+        marginBottom: 1,
+      }}
+    >
+      <span style={{
+        width: 5, height: 5, borderRadius: '50%', flexShrink: 0, marginTop: 4,
+        background: isActive ? 'var(--accent)' : 'var(--border)',
+        display: 'inline-block', transition: 'background 0.15s',
+      }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 11, color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+          fontWeight: isActive ? 600 : 400,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4,
+        }}>
+          {label}
+        </div>
+        {preview && (
+          <div style={{
+            fontSize: 10, color: 'var(--text-muted)', marginTop: 1,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {preview}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

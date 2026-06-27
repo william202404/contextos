@@ -1,7 +1,7 @@
 import { openDB } from 'idb'
 
 const DB_NAME = 'contextos'
-const DB_VERSION = 3
+const DB_VERSION = 4
 
 let dbPromise = null
 
@@ -32,6 +32,14 @@ function getDB() {
         }
         if (!db.objectStoreNames.contains('memories')) {
           db.createObjectStore('memories', { keyPath: 'projectId' })
+        }
+
+        // v3 → v4 迁移：conversations store 增加 projectId 索引（支持项目内多线程）
+        if (oldVersion < 4 && db.objectStoreNames.contains('conversations')) {
+          const convStore = transaction.objectStore('conversations')
+          if (!convStore.indexNames.contains('projectId')) {
+            convStore.createIndex('projectId', 'projectId')
+          }
         }
 
         // v2 → v3 迁移：summary 字段搬到 status（老用户数据兼容）
@@ -196,6 +204,16 @@ export async function updateConversation(id, changes) {
   const conv = await db.get('conversations', id)
   if (!conv) return
   await db.put('conversations', { ...conv, ...changes, updatedAt: Date.now() })
+}
+
+export async function getProjectConversations(projectId) {
+  const db = await getDB()
+  try {
+    const all = await db.getAllFromIndex('conversations', 'projectId', projectId)
+    return all.sort((a, b) => b.updatedAt - a.updatedAt)
+  } catch {
+    return []
+  }
 }
 
 // ── Stats ─────────────────────────────────────────────────
