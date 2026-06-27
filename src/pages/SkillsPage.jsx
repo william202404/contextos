@@ -5,8 +5,10 @@ import { BUILTIN_SKILLS, SKILL_CATEGORIES, getInstalledSkills, installSkillFull,
 import { searchSkillHub, normalizeSkillHubSkill } from '../lib/skillhub'
 import { getUserProfile } from '../components/SettingsModal'
 import SettingsModal from '../components/SettingsModal'
+import { useTranslation } from 'react-i18next'
 
 export default function SkillsPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [activeCategory, setActiveCategory] = useState('全部')
   const [installedSkills, setInstalledSkills] = useState([])
@@ -20,7 +22,7 @@ export default function SkillsPage() {
 
   const profile = getUserProfile()
   const displayName = profile.name || 'ContextOS'
-  const displayRole = profile.role || '欢迎使用'
+  const displayRole = profile.role || t('nav.welcome')
 
   const installedIds = installedSkills.map(s => s.id)
 
@@ -43,10 +45,10 @@ export default function SkillsPage() {
 
   useEffect(() => { loadInstalled() }, [])
 
-  // 搜索防抖：首次立即加载，后续输入 500ms 延迟
+  // debounce search: immediate on mount, 500ms delay on input
   useEffect(() => {
-    const t = setTimeout(() => loadSkillHub(search), search ? 500 : 0)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => loadSkillHub(search), search ? 500 : 0)
+    return () => clearTimeout(timer)
   }, [search])
 
   const allSkills = [...BUILTIN_SKILLS, ...skillhubSkills]
@@ -100,13 +102,13 @@ export default function SkillsPage() {
 
         <nav style={{ padding: '0 10px', flex: 1, WebkitAppRegion: 'no-drag' }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', padding: '0 8px', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            工作台
+            {t('nav.workbench')}
           </div>
-          <NavItem icon={<LayoutDashboard size={15} />} label="概览" onClick={() => navigate('/')} />
-          <NavItem icon={<FolderOpen size={15} />} label="项目空间" onClick={() => navigate('/')} />
-          <NavItem icon={<MessageSquare size={15} />} label="对话" onClick={() => navigate('/')} />
-          <NavItem icon={<Sparkles size={15} />} label="技能" active />
-          <NavItem icon={<Plug size={15} />} label="MCP 工具" onClick={() => navigate('/mcp')} />
+          <NavItem icon={<LayoutDashboard size={15} />} label={t('nav.overview')} onClick={() => navigate('/')} />
+          <NavItem icon={<FolderOpen size={15} />} label={t('nav.projects')} onClick={() => navigate('/')} />
+          <NavItem icon={<MessageSquare size={15} />} label={t('nav.conversations')} onClick={() => navigate('/')} />
+          <NavItem icon={<Sparkles size={15} />} label={t('nav.skills')} active />
+          <NavItem icon={<Plug size={15} />} label={t('nav.mcp')} onClick={() => navigate('/mcp')} />
         </nav>
 
         <div style={{ padding: '10px 10px 0', borderTop: '1px solid var(--border)', WebkitAppRegion: 'no-drag' }}>
@@ -144,10 +146,10 @@ export default function SkillsPage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <div>
               <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.02em' }}>
-                技能市场
+                {t('skills.pageTitle')}
               </h1>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
-                {allSkills.length} 个可用技能 · {installedIds.length} 个已安装
+                {t('skills.availableCount', { total: allSkills.length, installed: installedIds.length })}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
@@ -163,7 +165,7 @@ export default function SkillsPage() {
                     transition: 'all 0.15s',
                   }}
                 >
-                  {tab === 'market' ? '技能市场' : `已安装 ${installedIds.length}`}
+                  {tab === 'market' ? t('skills.market') : t('skills.installedCount', { count: installedIds.length })}
                 </button>
               ))}
             </div>
@@ -183,7 +185,7 @@ export default function SkillsPage() {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="搜索技能名称或描述…"
+              placeholder={t('skills.searchPlaceholder')}
               style={{
                 flex: 1, border: 'none', outline: 'none', background: 'transparent',
                 fontSize: 13, color: 'var(--text-primary)', fontFamily: 'inherit',
@@ -201,7 +203,7 @@ export default function SkillsPage() {
         </div>
 
         <div style={{ padding: '24px 40px' }}>
-          {/* 已安装 tab */}
+          {/* installed tab */}
           {activeTab === 'installed' && (
             <InstalledTab
               skills={installedSkills}
@@ -210,14 +212,14 @@ export default function SkillsPage() {
           )}
 
           {activeTab === 'market' && <>
-          {/* SkillHub 公开技能（仅在加载中或有结果时显示） */}
+          {/* SkillHub community skills (shown when loading or results available) */}
           {(skillhubLoading || skillhubSkills.length > 0) && (
             <div style={{ marginBottom: 32 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
                 <Cloud size={14} color="var(--accent)" />
-                <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>SkillHub 社区技能</h2>
+                <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{t('skills.skillhubCommunity')}</h2>
                 <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                {skillhubLoading && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>加载中…</span>}
+                {skillhubLoading && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('skills.loading')}</span>}
               </div>
               {skillhubSkills.length > 0 && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
@@ -236,7 +238,7 @@ export default function SkillsPage() {
             <div style={{ marginBottom: 32 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
                 <Zap size={14} color="#d97706" />
-                <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>热门推荐</h2>
+                <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{t('skills.featured')}</h2>
                 <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
@@ -253,7 +255,7 @@ export default function SkillsPage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                {search ? `搜索结果 · ${filtered.length} 个` : '全部技能'}
+                {search ? t('skills.searchResults', { count: filtered.length }) : t('skills.allSkills')}
               </h2>
               <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
             </div>
@@ -285,7 +287,7 @@ export default function SkillsPage() {
                 background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)',
               }}>
                 <Search size={24} color="var(--text-muted)" style={{ margin: '0 auto 10px' }} />
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>没有找到匹配的技能</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('skills.noResults')}</div>
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
@@ -320,6 +322,7 @@ export default function SkillsPage() {
 }
 
 function FeaturedCard({ skill, installed, installing, onSelect, onToggle }) {
+  const { t } = useTranslation()
   return (
     <div
       onClick={() => onSelect(skill)}
@@ -352,7 +355,7 @@ function FeaturedCard({ skill, installed, installing, onSelect, onToggle }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'all 0.15s',
         }}
-        title={installed ? '卸载' : '安装'}
+        title={installed ? t('skills.uninstall') : t('skills.install')}
       >
         {installing
           ? <span style={{ width: 10, height: 10, border: '1.5px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
@@ -364,6 +367,7 @@ function FeaturedCard({ skill, installed, installing, onSelect, onToggle }) {
 }
 
 function SkillCard({ skill, installed, installing, onSelect, onToggle }) {
+  const { t } = useTranslation()
   return (
     <div
       onClick={() => onSelect(skill)}
@@ -434,13 +438,13 @@ function SkillCard({ skill, installed, installing, onSelect, onToggle }) {
         }}
       >
         {installing
-          ? <><span style={{ width: 11, height: 11, border: '1.5px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> 配置中…</>
-          : installed ? <><Check size={13} /> 已安装</> : <><Download size={13} /> 安装到技能库</>
+          ? <><span style={{ width: 11, height: 11, border: '1.5px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> {t('skills.configuring')}</>
+          : installed ? <><Check size={13} /> {t('skills.installedToMarket')}</> : <><Download size={13} /> {t('skills.installToMarket')}</>
         }
       </button>
       {installed && (
         <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', marginTop: 5 }}>
-          技能通过 AI 提示词工作，安装即时生效
+          {t('skills.installNote')}
         </div>
       )}
     </div>
@@ -448,12 +452,13 @@ function SkillCard({ skill, installed, installing, onSelect, onToggle }) {
 }
 
 function InstalledTab({ skills, onUninstall }) {
+  const { t } = useTranslation()
   if (skills.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '60px 0' }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>📦</div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>还没有安装任何技能</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>去技能市场浏览并安装技能，安装后在项目对话顶部的技能栏中激活</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>{t('skills.noInstalled')}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('skills.noInstalledDesc')}</div>
       </div>
     )
   }
@@ -466,7 +471,7 @@ function InstalledTab({ skills, onUninstall }) {
         borderRadius: 8, padding: '8px 12px',
       }}>
         <span style={{ fontSize: 14 }}>💡</span>
-        已安装 {skills.length} 个技能 · 在项目对话顶部的<b style={{ color: 'var(--text-secondary)' }}>技能栏</b>中选择激活
+        {t('skills.installedTabNote', { count: skills.length })}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
         {skills.map(skill => (
@@ -505,7 +510,7 @@ function InstalledTab({ skills, onUninstall }) {
             </div>
             <button
               onClick={() => onUninstall(skill)}
-              title="卸载"
+              title={t('skills.uninstall')}
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
                 padding: '7px 0', borderRadius: 9, fontSize: 12, fontWeight: 500,
@@ -515,7 +520,7 @@ function InstalledTab({ skills, onUninstall }) {
               onMouseEnter={e => { e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.borderColor = 'var(--red)' }}
               onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)' }}
             >
-              <Trash2 size={12} /> 卸载
+              <Trash2 size={12} /> {t('skills.uninstall')}
             </button>
           </div>
         ))}
@@ -525,6 +530,7 @@ function InstalledTab({ skills, onUninstall }) {
 }
 
 function SkillDetailModal({ skill, installed, onClose, onToggle }) {
+  const { t } = useTranslation()
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 200,
@@ -574,7 +580,7 @@ function SkillDetailModal({ skill, installed, onClose, onToggle }) {
 
           {skill.systemPrompt && (
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>AI 角色设定</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{t('skills.aiRole')}</div>
               <div style={{
                 background: 'var(--bg-card)', border: '1px solid var(--border)',
                 borderRadius: 10, padding: '10px 14px',
@@ -599,11 +605,11 @@ function SkillDetailModal({ skill, installed, onClose, onToggle }) {
               color: installed ? 'var(--accent)' : 'white',
             }}
           >
-            {installed ? <><Check size={15} /> 已安装到技能库</> : <><Download size={15} /> 安装到技能库</>}
+            {installed ? <><Check size={15} /> {t('skills.installedToMarket')}</> : <><Download size={15} /> {t('skills.installToMarket')}</>}
           </button>
           {installed && (
             <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-muted)', textAlign: 'center' }}>
-              在项目对话顶部的技能栏中即可激活此技能
+              {t('skills.installedNote')}
             </div>
           )}
         </div>

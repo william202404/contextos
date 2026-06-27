@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { GitBranch, Network, FileText, Upload, FileArchive, Sparkles, Brain, X, Download } from 'lucide-react'
 import MarkmapViewer from './MarkmapViewer'
+import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
 
 const FILE_ICONS = {
   flowchart: { Icon: GitBranch, color: 'var(--accent)', bg: 'var(--accent-glow)' },
@@ -11,6 +13,7 @@ const FILE_ICONS = {
 }
 
 export default function FilePanel({ project, files, messages = [], tokenPercent = 0, onGenerateSummary, onSummaryEdit, onKnowledgeEdit, onConsolidateKnowledge, onClose, memory, reflectionRunning, onMemoryEdit, onReflect }) {
+  const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState('files')
   const [summarySubTab, setSummarySubTab] = useState('status') // 'status' | 'knowledge'
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -28,18 +31,18 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
     : 0
 
   function handleExport() {
-    const lines = [`# ${project?.name || '项目'}\n`]
+    const lines = [`# ${project?.name || project?.name || ''}\n`]
     if (project?.status) {
-      lines.push(`## 当前状态\n\n${project.status}\n`)
+      lines.push(`${t('filePanel.exportPrefix')}${project.status}\n`)
     }
     if (project?.knowledge) {
-      lines.push(`## 积累知识\n\n${project.knowledge}\n`)
+      lines.push(`${t('filePanel.exportKnowledge')}${project.knowledge}\n`)
     }
     if (messages.length > 0) {
-      lines.push('## 对话记录\n')
+      lines.push(`${t('filePanel.exportHistory')}\n`)
       messages.forEach(m => {
-        const role = m.role === 'user' ? '**我**' : '**AI**'
-        const time = m.timestamp ? new Date(m.timestamp).toLocaleString('zh-CN') : ''
+        const role = m.role === 'user' ? t('filePanel.me') : t('filePanel.ai')
+        const time = m.timestamp ? new Date(m.timestamp).toLocaleString() : ''
         lines.push(`${role}${time ? ` _(${time})_` : ''}\n\n${m.content || ''}\n`)
       })
     }
@@ -48,7 +51,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${project?.name || '项目'}.md`
+    a.download = `${project?.name || t('filePanel.title')}.md`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -62,7 +65,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
   function handleAddKnowledge() {
     const text = newKnowledge.trim()
     if (!text) return
-    const today = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
+    const today = new Date().toLocaleDateString(i18n.language === 'zh' ? 'zh-CN' : undefined, { month: 'long', day: 'numeric' })
     const entry = `- [${today}] ${text}`
     const existing = project?.knowledge || ''
     onKnowledgeEdit?.(existing ? existing + '\n' + entry : entry)
@@ -95,12 +98,12 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
         flexShrink: 0,
       }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-          项目文件
+          {t('filePanel.title')}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             onClick={handleExport}
-            title="导出为 Markdown"
+            title={t('filePanel.exportTooltip')}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center', transition: 'color 0.15s' }}
             onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
             onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
@@ -126,7 +129,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
               transition: 'all 0.15s',
             }}
           >
-            {{ files: '文件', summary: '摘要', memory: '记忆', history: '历史' }[tab]}
+            {{ files: t('filePanel.tabFiles'), summary: t('filePanel.tabSummary'), memory: t('filePanel.tabMemory'), history: t('filePanel.tabHistory') }[tab]}
           </button>
         ))}
       </div>
@@ -135,16 +138,16 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
         {/* 文件 tab：AI 产出物 + 上传文件 + 上下文用量 */}
         {activeTab === 'files' && (
           <>
-            <SectionLabel>AI 产出物</SectionLabel>
+            <SectionLabel>{t('filePanel.aiOutputs')}</SectionLabel>
             {aiOutputs.length === 0 ? (
-              <Empty>暂无 AI 产出物</Empty>
+              <Empty>{t('filePanel.noAiOutputs')}</Empty>
             ) : (
               aiOutputs.map(f => <FileItem key={f.id} file={f} onClick={() => setPreviewFile(f)} />)
             )}
 
-            <SectionLabel style={{ marginTop: 14 }}>上传文件</SectionLabel>
+            <SectionLabel style={{ marginTop: 14 }}>{t('filePanel.uploads')}</SectionLabel>
             {uploads.length === 0 ? (
-              <Empty>暂无上传文件</Empty>
+              <Empty>{t('filePanel.noUploads')}</Empty>
             ) : (
               uploads.map(f => <FileItem key={f.id} file={f} />)
             )}
@@ -155,7 +158,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
               border: '1px solid var(--border)', borderRadius: 12, padding: 12,
             }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                上下文用量
+                {t('filePanel.contextUsage')}
               </div>
               <div style={{ background: 'var(--bg-hover)', borderRadius: 4, height: 5, overflow: 'hidden', marginBottom: 6 }}>
                 <div style={{
@@ -168,8 +171,8 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
                 }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
-                <span>{tokenPercent}% 已使用</span>
-                <span style={{ fontSize: 10 }}>约 200k 上下文窗口</span>
+                <span>{t('filePanel.contextUsed', { percent: tokenPercent })}</span>
+                <span style={{ fontSize: 10 }}>{t('filePanel.contextWindow')}</span>
               </div>
             </div>
           </>
@@ -180,7 +183,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
           <div>
             {/* 子 Tab */}
             <div style={{ display: 'flex', gap: 0, marginBottom: 12, background: 'var(--bg-card)', borderRadius: 8, padding: 3, border: '1px solid var(--border)' }}>
-              {[['status', '当前状态'], ['knowledge', knowledgeCount > 0 ? `知识库 (${knowledgeCount})` : '知识库']].map(([key, label]) => (
+              {[['status', t('filePanel.statusTab')], ['knowledge', knowledgeCount > 0 ? t('filePanel.knowledgeTabCount', { count: knowledgeCount }) : t('filePanel.knowledgeTab')]].map(([key, label]) => (
                 <button key={key} onClick={() => setSummarySubTab(key)} style={{
                   flex: 1, padding: '5px 0', borderRadius: 6, fontSize: 11.5, fontWeight: 600,
                   cursor: 'pointer', border: 'none', transition: 'all 0.15s',
@@ -193,19 +196,19 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
             {summarySubTab === 'status' && (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>项目当前进展</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('filePanel.progressLabel')}</div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {!editingSummary && onSummaryEdit && (
                       <button onClick={() => { setSummaryDraft(project?.status || project?.summary || ''); setEditingSummary(true) }}
                         style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-muted)', fontWeight: 500 }}>
-                        编辑
+                        {t('filePanel.edit')}
                       </button>
                     )}
                     {onGenerateSummary && (
                       <button onClick={handleGenerateSummary} disabled={summaryLoading || messages.length < 2}
                         style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: summaryLoading || messages.length < 2 ? 'default' : 'pointer', border: '1px solid var(--border)', background: 'var(--bg-card)', color: summaryLoading || messages.length < 2 ? 'var(--text-muted)' : 'var(--accent)', fontWeight: 500 }}>
                         <Sparkles size={11} />
-                        {summaryLoading ? '生成中…' : 'AI 更新'}
+                        {summaryLoading ? t('filePanel.aiUpdating') : t('filePanel.aiUpdate')}
                       </button>
                     )}
                   </div>
@@ -215,13 +218,13 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
                     <textarea value={summaryDraft} onChange={e => setSummaryDraft(e.target.value)}
                       style={{ width: '100%', minHeight: 100, padding: 12, borderRadius: 10, border: '1px solid var(--accent-light)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 13, lineHeight: 1.7, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }} />
                     <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
-                      <button onClick={() => setEditingSummary(false)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)' }}>取消</button>
-                      <button onClick={() => { onSummaryEdit?.(summaryDraft); setEditingSummary(false) }} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, cursor: 'pointer', border: 'none', background: 'var(--accent)', color: 'white', fontWeight: 600 }}>保存</button>
+                      <button onClick={() => setEditingSummary(false)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)' }}>{t('filePanel.cancel')}</button>
+                      <button onClick={() => { onSummaryEdit?.(summaryDraft); setEditingSummary(false) }} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, cursor: 'pointer', border: 'none', background: 'var(--accent)', color: 'white', fontWeight: 600 }}>{t('filePanel.save')}</button>
                     </div>
                   </div>
                 ) : (
                   <div style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--text-secondary)', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, minHeight: 80 }}>
-                    {project?.status || project?.summary || <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>暂无摘要。继续对话，AI 会自动提炼。</span>}
+                    {project?.status || project?.summary || <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{t('filePanel.noSummary')}</span>}
                   </div>
                 )}
               </div>
@@ -231,7 +234,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    积累知识 <span style={{ fontSize: 9, fontWeight: 400, textTransform: 'none' }}>（AI 自动提取）</span>
+                    {t('filePanel.knowledgeHeader')} <span style={{ fontSize: 9, fontWeight: 400, textTransform: 'none' }}>{t('filePanel.knowledgeAuto')}</span>
                   </div>
                   {onConsolidateKnowledge && knowledgeCount >= 8 && (
                     <button
@@ -242,10 +245,10 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
                       }}
                       disabled={consolidating}
                       style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, padding: '3px 8px', borderRadius: 6, cursor: consolidating ? 'default' : 'pointer', border: '1px solid var(--border)', background: 'var(--bg-card)', color: consolidating ? 'var(--text-muted)' : 'var(--accent)', fontWeight: 500 }}
-                      title="AI 合并重复条目，压缩知识库体积"
+                      title={t('filePanel.consolidateTooltip')}
                     >
                       <Sparkles size={10} />
-                      {consolidating ? '整合中…' : '整合'}
+                      {consolidating ? t('filePanel.consolidating') : t('filePanel.consolidate')}
                     </button>
                   )}
                 </div>
@@ -268,12 +271,12 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
                             </div>
                             <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
                               <button onClick={() => navigator.clipboard.writeText(content)}
-                                title="复制" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: '2px 4px', borderRadius: 4 }}>
-                                复制
+                                title={t('filePanel.copy')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: '2px 4px', borderRadius: 4 }}>
+                                {t('filePanel.copy')}
                               </button>
                               {onKnowledgeEdit && (
                                 <button onClick={() => handleDeleteKnowledge(i)}
-                                  title="删除" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, padding: '2px 4px', borderRadius: 4, lineHeight: 1 }}
+                                  title={t('project.delete')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, padding: '2px 4px', borderRadius: 4, lineHeight: 1 }}
                                   onMouseEnter={e => e.currentTarget.style.color = 'var(--red)'}
                                   onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
                                   ×
@@ -287,7 +290,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
                   </div>
                 ) : (
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '16px 4px', lineHeight: 1.7 }}>
-                    暂无积累知识。继续对话，AI 会自动从对话中提取可复用结论存入此处。
+                    {t('filePanel.noKnowledge')}
                   </div>
                 )}
 
@@ -301,15 +304,15 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
                           value={newKnowledge}
                           onChange={e => setNewKnowledge(e.target.value)}
                           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddKnowledge() } if (e.key === 'Escape') { setAddingKnowledge(false); setNewKnowledge('') } }}
-                          placeholder="输入要记录的知识或结论…"
+                          placeholder={t('filePanel.addKnowledgePlaceholder')}
                           rows={2}
                           style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--accent-border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit', resize: 'none', outline: 'none', boxSizing: 'border-box', lineHeight: 1.55 }}
                         />
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                           <button onClick={() => { setAddingKnowledge(false); setNewKnowledge('') }}
-                            style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)' }}>取消</button>
+                            style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)' }}>{t('filePanel.cancel')}</button>
                           <button onClick={handleAddKnowledge}
-                            style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: 'none', background: 'var(--accent)', color: 'white', fontWeight: 600 }}>添加</button>
+                            style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: 'none', background: 'var(--accent)', color: 'white', fontWeight: 600 }}>{t('filePanel.add')}</button>
                         </div>
                       </div>
                     ) : (
@@ -317,7 +320,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
                         style={{ width: '100%', padding: '6px 0', borderRadius: 8, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer', transition: 'all 0.15s' }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}>
-                        + 手动添加知识
+                        {t('filePanel.addKnowledge')}
                       </button>
                     )}
                   </div>
@@ -352,6 +355,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
 }
 
 function FilePreviewModal({ file, onClose }) {
+  const { t } = useTranslation()
   const mermaidRef = useRef(null)
 
   useEffect(() => {
@@ -401,7 +405,7 @@ function FilePreviewModal({ file, onClose }) {
           ) : file.content ? (
             <pre style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>{file.content}</pre>
           ) : (
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', paddingTop: 40 }}>暂无可预览内容</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', paddingTop: 40 }}>{t('filePanel.noPreview')}</div>
           )}
         </div>
       </div>
@@ -410,8 +414,9 @@ function FilePreviewModal({ file, onClose }) {
 }
 
 function HistoryTab({ messages }) {
+  const { t } = useTranslation()
   if (messages.length === 0) {
-    return <Empty>暂无对话记录</Empty>
+    return <Empty>{t('filePanel.noHistory')}</Empty>
   }
 
   const today = new Date().toDateString()
@@ -420,7 +425,7 @@ function HistoryTab({ messages }) {
   const grouped = messages.reduce((acc, m) => {
     const d = new Date(m.timestamp)
     const key = d.toDateString()
-    const label = key === today ? '今天' : key === yesterday ? '昨天' : d.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
+    const label = key === today ? t('filePanel.today') : key === yesterday ? t('filePanel.yesterday') : d.toLocaleDateString(i18n.language === 'zh' ? 'zh-CN' : undefined, { month: 'long', day: 'numeric' })
     if (!acc[label]) acc[label] = []
     acc[label].push(m)
     return acc
@@ -435,7 +440,7 @@ function HistoryTab({ messages }) {
             textTransform: 'uppercase', letterSpacing: '0.06em',
             marginBottom: 8, padding: '0 2px',
           }}>
-            {label} · {msgs.length} 条
+            {label} · {msgs.length}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {msgs.map(m => (
@@ -449,7 +454,7 @@ function HistoryTab({ messages }) {
                   background: m.role === 'user' ? 'var(--accent-glow)' : 'var(--green-bg)',
                   color: m.role === 'user' ? 'var(--accent)' : 'var(--green)',
                 }}>
-                  {m.role === 'user' ? '我' : 'AI'}
+                  {m.role === 'user' ? t('chatMessage.me') : 'AI'}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
@@ -460,7 +465,7 @@ function HistoryTab({ messages }) {
                   </div>
                 </div>
                 <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
-                  {new Date(m.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(m.timestamp).toLocaleTimeString(i18n.language === 'zh' ? 'zh-CN' : undefined, { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
             ))}
@@ -537,12 +542,13 @@ function FileItem({ file, onClick }) {
 function formatTime(ts) {
   if (!ts) return ''
   const diff = Date.now() - ts
-  if (diff < 60_000) return '刚刚'
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}分钟前`
-  return new Date(ts).toLocaleDateString('zh-CN')
+  if (diff < 60_000) return i18n.t('filePanel.justNow')
+  if (diff < 3_600_000) return i18n.t('filePanel.minutesAgo', { count: Math.floor(diff / 60_000) })
+  return new Date(ts).toLocaleDateString(i18n.language === 'zh' ? 'zh-CN' : undefined)
 }
 
 function MemoryTab({ memory, reflectionRunning, onSave, onReflect, messageCount }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
 
@@ -562,7 +568,7 @@ function MemoryTab({ memory, reflectionRunning, onSave, onReflect, messageCount 
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-          项目记忆
+          {t('filePanel.memoryTitle')}
           {(memory?.version ?? 0) > 0 && (
             <span style={{ marginLeft: 5, fontWeight: 400, textTransform: 'none', letterSpacing: 0, fontSize: 10 }}>
               v{memory.version}
@@ -581,7 +587,7 @@ function MemoryTab({ memory, reflectionRunning, onSave, onReflect, messageCount 
           }}
         >
           <Brain size={11} />
-          {reflectionRunning ? '反思中…' : '立即反思'}
+          {reflectionRunning ? t('filePanel.reflecting') : t('filePanel.reflect')}
         </button>
       </div>
 
@@ -591,7 +597,7 @@ function MemoryTab({ memory, reflectionRunning, onSave, onReflect, messageCount 
             value={draft}
             onChange={e => setDraft(e.target.value)}
             autoFocus
-            placeholder="- 用 bullet 格式记录重要信息&#10;- 例如：用户偏好使用 TypeScript&#10;- 例如：已确认采用 React Router"
+            placeholder={t('filePanel.memoryPlaceholder')}
             style={{
               width: '100%', minHeight: 200, background: 'var(--bg-input)',
               border: '1px solid var(--accent)', borderRadius: 10, padding: 12,
@@ -603,24 +609,24 @@ function MemoryTab({ memory, reflectionRunning, onSave, onReflect, messageCount 
             <button
               onClick={() => setEditing(false)}
               style={{ fontSize: 11, padding: '5px 10px', borderRadius: 6, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)' }}
-            >取消</button>
+            >{t('filePanel.cancel')}</button>
             <button
               onClick={saveEdit}
               style={{ fontSize: 11, padding: '5px 12px', borderRadius: 6, cursor: 'pointer', background: 'var(--accent)', border: 'none', color: 'white', fontWeight: 600 }}
-            >保存</button>
+            >{t('filePanel.save')}</button>
           </div>
         </div>
       ) : (
         <div
           onClick={startEdit}
-          title="点击编辑"
+          title={t('filePanel.clickToEdit')}
           style={{
             fontSize: 12, lineHeight: 1.75, color: memory?.content ? 'var(--text-secondary)' : 'var(--text-muted)',
             background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 14,
             minHeight: 120, cursor: 'text', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
           }}
         >
-          {memory?.content || '暂无记忆条目。\n\n点此编辑手动添加，或点"立即反思"从对话中自动提取。'}
+          {memory?.content || t('filePanel.noMemory')}
         </div>
       )}
 
@@ -631,13 +637,13 @@ function MemoryTab({ memory, reflectionRunning, onSave, onReflect, messageCount 
           fontSize: 11, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 6,
         }}>
           <span style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>⚙</span>
-          AI 正在提取对话记忆…
+          {t('filePanel.reflectingMsg')}
         </div>
       )}
 
       {memory?.updatedAt && !reflectionRunning && (
         <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, textAlign: 'right' }}>
-          上次更新：{formatTime(memory.updatedAt)}
+          {t('filePanel.lastUpdated', { time: formatTime(memory.updatedAt) })}
         </div>
       )}
     </div>

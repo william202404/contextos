@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export default function CreateProjectModal({ suggestedName, suggestedSummary, onConfirm, onCancel, loading }) {
+  const { t } = useTranslation()
   const [name, setName] = useState(suggestedName || '')
   const [summary, setSummary] = useState(suggestedSummary || '')
 
@@ -27,25 +29,25 @@ export default function CreateProjectModal({ suggestedName, suggestedSummary, on
         borderRadius: 20, padding: 28, width: 480, maxWidth: '90vw',
         boxShadow: 'var(--shadow-lg)',
       }}>
-        <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>创建项目</h3>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>{t('createProject.title')}</h3>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 22, lineHeight: 1.5 }}>
-          AI 已根据对话自动生成项目名称和摘要，你可以直接编辑。
+          {t('createProject.aiGenerated')}
         </p>
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)', fontSize: 13 }}>
             <div style={{ fontSize: 28, marginBottom: 10 }}>✦</div>
-            AI 正在生成项目信息…
+            {t('createProject.generating')}
           </div>
         ) : (
           <>
             <div style={{ marginBottom: 16 }}>
-              <div style={labelStyle}>项目名称</div>
+              <div style={labelStyle}>{t('createProject.nameLabel')}</div>
               <input
                 autoFocus
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="输入项目名称"
+                placeholder={t('createProject.namePlaceholder')}
                 style={inputStyle}
                 onFocus={e => { e.target.style.borderColor = 'var(--accent)'; e.target.style.boxShadow = 'none' }}
                 onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none' }}
@@ -53,12 +55,12 @@ export default function CreateProjectModal({ suggestedName, suggestedSummary, on
             </div>
 
             <div style={{ marginBottom: 24 }}>
-              <div style={labelStyle}>项目摘要</div>
+              <div style={labelStyle}>{t('createProject.summaryLabel')}</div>
               <textarea
                 rows={3}
                 value={summary}
                 onChange={e => setSummary(e.target.value)}
-                placeholder="简短描述这个项目的目标和背景…"
+                placeholder={t('createProject.summaryPlaceholder')}
                 style={{ ...inputStyle, resize: 'none', lineHeight: 1.6 }}
                 onFocus={e => { e.target.style.borderColor = 'var(--accent)'; e.target.style.boxShadow = 'none' }}
                 onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none' }}
@@ -68,13 +70,13 @@ export default function CreateProjectModal({ suggestedName, suggestedSummary, on
         )}
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button onClick={onCancel} style={cancelBtnStyle}>取消</button>
+          <button onClick={onCancel} style={cancelBtnStyle}>{t('createProject.cancel')}</button>
           <button
             onClick={handleConfirm}
             disabled={loading || !name.trim()}
             style={{ ...saveBtnStyle, opacity: loading || !name.trim() ? 0.5 : 1 }}
           >
-            创建项目
+            {t('createProject.create')}
           </button>
         </div>
       </div>

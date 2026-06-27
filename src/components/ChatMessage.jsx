@@ -5,13 +5,15 @@ import { Bot, Copy, Check, Pencil, RefreshCw } from 'lucide-react'
 import ArtifactCard from './ArtifactCard'
 import { MODELS } from '../lib/llm'
 import { getUserProfile } from './SettingsModal'
+import { useTranslation } from 'react-i18next'
 
 export default function ChatMessage({ message, onSaveArtifact, onArtifactUpdate, onEdit, onRegenerate, onRequestAiEdit }) {
+  const { t } = useTranslation()
   const isUser = message.role === 'user'
   const modelInfo = message.model ? MODELS[message.model] : null
   const profile = getUserProfile()
   const userInitial = (profile.name || 'U').charAt(0).toUpperCase()
-  const userName = profile.name || '我'
+  const userName = profile.name || t('chatMessage.me')
   const [hovered, setHovered] = useState(false)
   const [copied, setCopied] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -91,19 +93,19 @@ export default function ChatMessage({ message, onSaveArtifact, onArtifactUpdate,
           <span>{formatTime(message.timestamp)}</span>
           {!isUser && hovered && (
             <>
-              <button onClick={handleCopy} title="复制内容" style={{ ...actionBtnStyle, marginLeft: 4, color: copied ? 'var(--green)' : 'var(--text-muted)' }}>
-                {copied ? <><Check size={11} />已复制</> : <><Copy size={11} />复制</>}
+              <button onClick={handleCopy} title={t('chatMessage.copy')} style={{ ...actionBtnStyle, marginLeft: 4, color: copied ? 'var(--green)' : 'var(--text-muted)' }}>
+                {copied ? <><Check size={11} />{t('chatMessage.copied')}</> : <><Copy size={11} />{t('chatMessage.copy')}</>}
               </button>
               {onRegenerate && (
-                <button onClick={() => onRegenerate(message.id)} title="重新执行" style={actionBtnStyle}>
-                  <RefreshCw size={11} />重执行
+                <button onClick={() => onRegenerate(message.id)} title={t('chatMessage.rerun')} style={actionBtnStyle}>
+                  <RefreshCw size={11} />{t('chatMessage.rerun')}
                 </button>
               )}
             </>
           )}
           {isUser && hovered && !editing && onEdit && (
-            <button onClick={() => { setEditText(message.content || ''); setEditing(true) }} title="编辑并重新发送" style={{ ...actionBtnStyle, marginLeft: 4 }}>
-              <Pencil size={11} />编辑
+            <button onClick={() => { setEditText(message.content || ''); setEditing(true) }} title={t('chatMessage.edit')} style={{ ...actionBtnStyle, marginLeft: 4 }}>
+              <Pencil size={11} />{t('chatMessage.edit')}
             </button>
           )}
         </div>
@@ -124,8 +126,8 @@ export default function ChatMessage({ message, onSaveArtifact, onArtifactUpdate,
               }}
             />
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setEditing(false)} style={{ ...actionBtnStyle, padding: '4px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }}>取消</button>
-              <button onClick={handleEditConfirm} style={{ padding: '4px 12px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>重新发送</button>
+              <button onClick={() => setEditing(false)} style={{ ...actionBtnStyle, padding: '4px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }}>{t('chatMessage.cancel')}</button>
+              <button onClick={handleEditConfirm} style={{ padding: '4px 12px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>{t('chatMessage.resend')}</button>
             </div>
           </div>
         ) : (
@@ -184,6 +186,7 @@ export default function ChatMessage({ message, onSaveArtifact, onArtifactUpdate,
 }
 
 function CodeBlock({ children, ...props }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   const preRef = useRef(null)
   function handleCopy() {
@@ -206,7 +209,7 @@ function CodeBlock({ children, ...props }) {
           cursor: 'pointer', transition: 'color 0.15s',
         }}
       >
-        {copied ? '✓ 已复制' : '复制'}
+        {copied ? t('chatMessage.copiedCode') : t('chatMessage.copyCode')}
       </button>
     </div>
   )

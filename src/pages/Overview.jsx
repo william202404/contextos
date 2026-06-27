@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   LayoutDashboard, FolderOpen, MessageSquare, Sparkles, Settings,
   MessageCirclePlus, FolderPlus, Archive, ChevronDown, ChevronUp, Zap, Scissors, Plug, Search,
@@ -27,19 +28,24 @@ const TEMPLATES = [
   { id: 'knowledge-extractor', icon: '🧲', name: '知识提炼', desc: '从对话历史主动提炼可沉淀的方法论和结论', skillTag: 'ContextOS 专属', systemPrompt: '你是一位知识提炼师。帮我从当前对话历史中主动提炼可沉淀的方法论、结论和行动建议，整理成结构化的知识条目。' },
 ]
 
-function getDayGuide(profile) {
+function getDayGuide(profile, t) {
   const name = profile.name || ''
   const hour = new Date().getHours()
-  const g = (h, hint) => ({ greeting: `${h}${name ? '，' + name : ''}`, hint })
-  if (hour < 6)  return g('夜深了', '深夜思考往往最清醒，有什么想整理的？')
-  if (hour < 10) return g('早上好', '新的一天，先定一个今天最重要的事？')
-  if (hour < 14) return g('上午好', '有什么正在推进的任务需要 AI 帮一把？')
-  if (hour < 18) return g('下午好', '需要梳理思路、整理内容，或者做个决策？')
-  return g('晚上好', '一天快结束了，点"今日助手"做个复盘，整理明天待办？')
+  const sep = name ? t('overview.nameSep') : ''
+  const g = (key) => ({
+    greeting: `${t('overview.' + key + 'Greet')}${sep}${name}`,
+    hint: t('overview.' + key + 'Hint'),
+  })
+  if (hour < 6)  return g('lateNight')
+  if (hour < 10) return g('morning')
+  if (hour < 14) return g('forenoon')
+  if (hour < 18) return g('afternoon')
+  return g('evening')
 }
 
 export default function Overview() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [projects, setProjects] = useState([])
   const [archivedProjects, setArchivedProjects] = useState([])
   const [conversations, setConversations] = useState([])
@@ -175,7 +181,7 @@ export default function Overview() {
     navigate(`/project/${id}`)
   }
 
-  const { greeting, hint } = getDayGuide(profile)
+  const { greeting, hint } = getDayGuide(profile, t)
   const displayName = profile.name || 'ContextOS'
   const visibleProjects = showAllProjects ? projects : projects.slice(0, PROJECT_PREVIEW_LIMIT)
   const knowledgeCount = projects.reduce((sum, p) => {
@@ -206,14 +212,14 @@ export default function Overview() {
           </div>
         </div>
         <nav style={{ padding: '0 10px', flex: 1, overflowY: 'auto', WebkitAppRegion: 'no-drag' }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', padding: '0 8px', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>工作台</div>
-          <NavItem icon={<LayoutDashboard size={15} />} label="概览" active />
-          <NavItem icon={<FolderOpen size={15} />} label="项目空间" badge={projects.length || undefined} onClick={() => document.getElementById('section-projects')?.scrollIntoView({ behavior: 'smooth' })} />
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', padding: '0 8px', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('nav.workbench')}</div>
+          <NavItem icon={<LayoutDashboard size={15} />} label={t('nav.overview')} active />
+          <NavItem icon={<FolderOpen size={15} />} label={t('nav.projects')} badge={projects.length || undefined} onClick={() => document.getElementById('section-projects')?.scrollIntoView({ behavior: 'smooth' })} />
 
           {/* 对话 — 可展开列表 */}
           <NavItem
             icon={<MessageSquare size={15} />}
-            label="对话"
+            label={t('nav.conversations')}
             badge={conversations.length || undefined}
             expandable
             expanded={showConvList}
@@ -222,7 +228,7 @@ export default function Overview() {
           {showConvList && (
             <div style={{ marginLeft: 10, borderLeft: '1px solid var(--border)', paddingLeft: 8, marginBottom: 4 }}>
               {conversations.length === 0 ? (
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '6px 8px' }}>暂无对话记录</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '6px 8px' }}>{t('nav.noConversations')}</div>
               ) : (
                 conversations.slice(0, 8).map(conv => (
                   <ConvSideItem
@@ -236,14 +242,14 @@ export default function Overview() {
               )}
               {conversations.length > 8 && (
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '5px 8px' }}>
-                  还有 {conversations.length - 8} 条…
+                  {t('nav.moreItems', { count: conversations.length - 8 })}
                 </div>
               )}
             </div>
           )}
 
-          <NavItem icon={<Sparkles size={15} />} label="技能" onClick={() => navigate('/skills')} />
-          <NavItem icon={<Plug size={15} />} label="MCP 工具" onClick={() => navigate('/mcp')} />
+          <NavItem icon={<Sparkles size={15} />} label={t('nav.skills')} onClick={() => navigate('/skills')} />
+          <NavItem icon={<Plug size={15} />} label={t('nav.mcp')} onClick={() => navigate('/mcp')} />
         </nav>
         <div style={{ padding: '10px 10px 0', borderTop: '1px solid var(--border)', WebkitAppRegion: 'no-drag' }}>
           <div onClick={() => setShowSettings(true)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', transition: 'background 0.15s' }}
@@ -255,7 +261,7 @@ export default function Overview() {
             </div>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{profile.role || '欢迎使用'}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{profile.role || t('nav.welcome')}</div>
             </div>
             <Settings size={13} color="var(--text-muted)" style={{ flexShrink: 0 }} />
           </div>
@@ -275,16 +281,16 @@ export default function Overview() {
               <Search size={14} />
             </button>
             <button onClick={handleDailyGuide} style={glowBtnStyle} onMouseEnter={e => e.currentTarget.style.opacity = '0.88'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
-              <Zap size={13} />今日助手
+              <Zap size={13} />{t('overview.dailyAssistant')}
             </button>
             <button onClick={() => setShowDecompose(true)} style={ghostBtnStyle} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-card)'}>
-              <Scissors size={14} />一键拆解
+              <Scissors size={14} />{t('overview.decompose')}
             </button>
             <button onClick={handleNewProject} style={ghostBtnStyle} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-card)'}>
-              <FolderPlus size={14} />新建项目
+              <FolderPlus size={14} />{t('overview.newProject')}
             </button>
             <button onClick={handleStartChat} style={primaryBtnStyle}>
-              <MessageCirclePlus size={14} />开始对话
+              <MessageCirclePlus size={14} />{t('overview.startChat')}
             </button>
           </div>
         </div>
@@ -292,28 +298,28 @@ export default function Overview() {
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 32 }}>
           {[
-            { label: '活跃项目', value: projects.length, unit: '个', sub: '进行中', color: 'var(--accent)', delay: 0 },
-            { label: '知识库结论', value: knowledgeCount, unit: '条', sub: '已积累', color: 'var(--teal)', delay: 0.06 },
-            { label: '本周 AI 交互', value: weeklyCount, unit: '轮', sub: '响应', color: 'var(--amber)', delay: 0.12 },
-            { label: '待归档对话', value: conversations.length, unit: '条', sub: '轻量对话', color: 'var(--text-secondary)', delay: 0.18 },
+            { label: t('overview.statsActive'),    value: projects.length,       unit: t('overview.unitProj'),  sub: t('overview.subInProgress'), color: 'var(--accent)',         delay: 0 },
+            { label: t('overview.statsKnowledge'), value: knowledgeCount,        unit: t('overview.unitLine'),  sub: t('overview.subAccumulated'), color: 'var(--teal)',           delay: 0.06 },
+            { label: t('overview.statsWeekly'),    value: weeklyCount,           unit: t('overview.unitRound'), sub: t('overview.subResponse'),   color: 'var(--amber)',          delay: 0.12 },
+            { label: t('overview.statsConvs'),     value: conversations.length,  unit: t('overview.unitLine'),  sub: t('overview.subLightConv'),  color: 'var(--text-secondary)', delay: 0.18 },
           ].map(s => <StatCard key={s.label} {...s} animate={animateStats} />)}
         </div>
 
         {/* Active Projects */}
         <Section
           id="section-projects"
-          title={`活跃项目${projects.length > 0 ? ` · ${projects.length}` : ''}`}
+          title={`${t('overview.sectionProjects')}${projects.length > 0 ? ` · ${projects.length}` : ''}`}
           action={
             archivedProjects.length > 0 ? (
               <button onClick={() => setShowArchived(v => !v)} style={subtleBtnStyle}>
-                <Archive size={11} />已归档 {archivedProjects.length}
+                <Archive size={11} />{t('overview.archivedCount', { count: archivedProjects.length })}
                 {showArchived ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
               </button>
             ) : null
           }
         >
           {projects.length === 0 ? (
-            <EmptyProjectsGuide onNew={handleNewProject} onChat={handleStartChat} onGuide={handleDailyGuide} />
+            <EmptyProjectsGuide onNew={handleNewProject} onChat={handleStartChat} onGuide={handleDailyGuide} t={t} />
           ) : (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
@@ -325,7 +331,9 @@ export default function Overview() {
               </div>
               {projects.length > PROJECT_PREVIEW_LIMIT && (
                 <button onClick={() => setShowAllProjects(v => !v)} style={{ ...subtleBtnStyle, marginTop: 12, width: '100%', justifyContent: 'center', padding: '9px 0' }}>
-                  {showAllProjects ? <><ChevronUp size={13} />收起</> : <><ChevronDown size={13} />还有 {projects.length - PROJECT_PREVIEW_LIMIT} 个项目</>}
+                  {showAllProjects
+                    ? <><ChevronUp size={13} />{t('overview.collapse')}</>
+                    : <><ChevronDown size={13} />{t('overview.moreProjects', { count: projects.length - PROJECT_PREVIEW_LIMIT })}</>}
                 </button>
               )}
             </>
@@ -333,7 +341,7 @@ export default function Overview() {
 
           {showArchived && archivedProjects.length > 0 && (
             <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px dashed var(--border)' }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>已归档</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('overview.archivedLabel')}</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                 {archivedProjects.map(p => (
                   <div key={p.id} onClick={() => navigate(`/project/${p.id}`)} style={{ padding: '12px 14px', borderRadius: 10, cursor: 'pointer', background: 'var(--bg-card)', border: '1px dashed var(--border)', opacity: 0.6, transition: 'opacity 0.15s' }}
@@ -351,23 +359,27 @@ export default function Overview() {
 
 
         {/* Quick start */}
-        <Section title="快速开始" action={<button onClick={() => navigate('/skills')} style={subtleBtnStyle}><Sparkles size={11} />技能市场</button>}>
+        <Section title={t('overview.sectionQuickStart')} action={<button onClick={() => navigate('/skills')} style={subtleBtnStyle}><Sparkles size={11} />{t('overview.skillMarket')}</button>}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-            {[...TEMPLATES, ...installedSkills].map((t, i) => (
-              <div key={t.id} onClick={() => handleStartTemplate(t)} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', transition: 'border-color 0.15s, background 0.15s', display: 'flex', flexDirection: 'column', gap: 6, animation: `slide-up 0.3s ease-out ${i * 0.03}s both` }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.background = 'var(--bg-hover)' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-card)' }}
-              >
-                <div style={{ fontSize: 20, marginBottom: 2 }}>{t.icon}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{t.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5, flex: 1 }}>{t.desc}</div>
-                {(t.skillTag || t.name) && (
-                  <div style={{ fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 3, background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent-border)', display: 'inline-block', alignSelf: 'flex-start', letterSpacing: '0.01em' }}>
-                    ✦ {t.skillTag || t.name}
-                  </div>
-                )}
-              </div>
-            ))}
+            {[...TEMPLATES, ...installedSkills].map((tmpl, i) => {
+              const displayName = t(`templates.${tmpl.id}_name`, { defaultValue: tmpl.name })
+              const displayDesc = t(`templates.${tmpl.id}_desc`, { defaultValue: tmpl.desc })
+              return (
+                <div key={tmpl.id} onClick={() => handleStartTemplate(tmpl)} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', transition: 'border-color 0.15s, background 0.15s', display: 'flex', flexDirection: 'column', gap: 6, animation: `slide-up 0.3s ease-out ${i * 0.03}s both` }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-card)' }}
+                >
+                  <div style={{ fontSize: 20, marginBottom: 2 }}>{tmpl.icon}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{displayName}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5, flex: 1 }}>{displayDesc}</div>
+                  {(tmpl.skillTag || tmpl.name) && (
+                    <div style={{ fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 3, background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent-border)', display: 'inline-block', alignSelf: 'flex-start', letterSpacing: '0.01em' }}>
+                      ✦ {tmpl.skillTag || displayName}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </Section>
       </main>
@@ -389,23 +401,23 @@ export default function Overview() {
   )
 }
 
-function EmptyProjectsGuide({ onNew, onChat, onGuide }) {
+function EmptyProjectsGuide({ onNew, onChat, onGuide, t }) {
   return (
     <div style={{ background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)', padding: '32px 28px', animation: 'slide-up 0.4s ease-out' }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>还没有项目</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>{t('overview.emptyTitle')}</div>
       <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.8 }}>
-        项目适合有明确目标、需要多次对话来积累上下文的事情。<br />
-        不确定要做什么？让 AI 帮你梳理今天的优先级。
+        {t('overview.emptyDesc1')}<br />
+        {t('overview.emptyDesc2')}
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <button onClick={onGuide} style={glowBtnStyle} onMouseEnter={e => e.currentTarget.style.opacity = '0.88'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
-          <Zap size={13} />AI 帮我规划今天
+          <Zap size={13} />{t('overview.emptyGuide')}
         </button>
         <button onClick={onNew} style={ghostBtnStyle} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-card)'}>
-          <FolderPlus size={14} />创建第一个项目
+          <FolderPlus size={14} />{t('overview.emptyCreate')}
         </button>
         <button onClick={onChat} style={ghostBtnStyle} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-card)'}>
-          <MessageCirclePlus size={14} />随便聊聊
+          <MessageCirclePlus size={14} />{t('overview.emptyChat')}
         </button>
       </div>
     </div>
@@ -438,6 +450,7 @@ function NavItem({ icon, label, active, badge, shortcut, onClick, expandable, ex
 }
 
 function ConvSideItem({ conv, onNavigate, onPromote, onDelete }) {
+  const { t } = useTranslation()
   const [hovered, setHovered] = useState(false)
   return (
     <div
@@ -447,13 +460,13 @@ function ConvSideItem({ conv, onNavigate, onPromote, onDelete }) {
       style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 6, cursor: 'pointer', background: hovered ? 'var(--bg-hover)' : 'transparent', transition: 'background 0.15s' }}
     >
       <span style={{ flex: 1, fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
-        {conv.title || '无标题'}
+        {conv.title || t('chat.noTitle')}
       </span>
       {hovered && (
         <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
           <button
             onClick={e => { e.stopPropagation(); onPromote() }}
-            title="升级为项目"
+            title={t('project.upgradeToProject')}
             style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', borderRadius: 4, padding: 0 }}
           >
             <FolderPlus size={11} />

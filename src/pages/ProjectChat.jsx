@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { getProject, saveProject, updateProject, updateConversation, getProjectMessages, getConvMessages, getProjectConversations, saveConversation, saveMessage, deleteMessage, deleteProjectMessages, getProjectFiles, saveFile, getConversation } from '../store/db'
@@ -19,6 +20,7 @@ import SettingsModal from '../components/SettingsModal'
 import SearchModal from '../components/SearchModal'
 
 export default function ProjectChat() {
+  const { t } = useTranslation()
   const { id } = useParams()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -731,7 +733,7 @@ graph TD
             title="绑定项目默认技能"
           >
             <span>✦</span>
-            <span>绑定技能</span>
+            <span>{t('chat.bindSkill')}</span>
           </button>
         )}
 
@@ -807,7 +809,7 @@ graph TD
         }}>
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 8px 4px' }}>
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '0 8px', marginBottom: 6 }}>
-              对话列表
+              {t('chat.threadList')}
             </div>
 
             {/* Default thread (legacy / main messages, no ?thread param) */}
@@ -835,16 +837,16 @@ graph TD
               onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}
             >
               <span style={{ fontSize: 14, lineHeight: 1, marginTop: -1 }}>+</span>
-              <span>新建对话</span>
+              <span>{t('chat.newThread')}</span>
             </button>
 
             <div style={{ height: 1, background: 'var(--border)', margin: '10px 8px 6px' }} />
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '0 8px', marginBottom: 4 }}>
-              导航
+              {t('chat.navigation')}
             </div>
             {[
-              { icon: '⊞', label: '概览', path: '/' },
-              { icon: '✦', label: '技能库', path: '/skills' },
+              { icon: '⊞', label: t('nav.overview'), path: '/' },
+              { icon: '✦', label: t('nav.skills'), path: '/skills' },
             ].map(item => (
               <div key={item.label} onClick={() => navigate(item.path)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', transition: 'background 0.1s, color 0.1s' }}
                 onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
@@ -1368,6 +1370,7 @@ const EMOJI_LIST = [
 ]
 
 function SkillPickerPopover({ skills, activeSkillId, onSelect, onClear, onClose }) {
+  const { t } = useTranslation()
   const ref = useRef(null)
   useEffect(() => {
     function handleClick(e) {
@@ -1385,7 +1388,7 @@ function SkillPickerPopover({ skills, activeSkillId, onSelect, onClear, onClose 
       minWidth: 200, maxWidth: 280,
     }}>
       <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', padding: '4px 8px 6px', letterSpacing: '0.05em' }}>
-        项目默认技能
+        {t('chat.defaultSkill')}
       </div>
       {skills.map(skill => {
         const isActive = skill.id === activeSkillId
@@ -1420,7 +1423,7 @@ function SkillPickerPopover({ skills, activeSkillId, onSelect, onClear, onClose 
             onMouseLeave={e => e.currentTarget.style.background = 'none'}
           >
             <span>✕</span>
-            <span>取消绑定</span>
+            <span>{t('chat.unbindSkill')}</span>
           </button>
         </>
       )}

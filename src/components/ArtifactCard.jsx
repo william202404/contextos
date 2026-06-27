@@ -2,18 +2,21 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { GitBranch, Network, FileText, Pencil, X, Check, ZoomIn, ZoomOut, Maximize2, RotateCcw, Download } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 const getMermaid = () => import('../lib/mermaidInit').then(m => m.getMermaid())
 import MarkmapViewer from './MarkmapViewer'
 
 const TYPE_MAP = {
-  flowchart: { label: '流程图', Icon: GitBranch, color: 'var(--accent)',  bg: 'var(--accent-glow)' },
-  mindmap:   { label: '脑图',   Icon: Network,   color: 'var(--cyan)',   bg: 'var(--cyan-bg)' },
-  document:  { label: '文档',   Icon: FileText,  color: 'var(--green)',  bg: 'var(--green-bg)' },
+  flowchart: { Icon: GitBranch, color: 'var(--accent)',  bg: 'var(--accent-glow)' },
+  mindmap:   { Icon: Network,   color: 'var(--cyan)',   bg: 'var(--cyan-bg)' },
+  document:  { Icon: FileText,  color: 'var(--green)',  bg: 'var(--green-bg)' },
 }
 
 export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEdit }) {
+  const { t } = useTranslation()
   const info = TYPE_MAP[artifact.type] || TYPE_MAP.document
   const { Icon } = info
+  const typeLabel = t(`artifact.${artifact.type}`, artifact.type)
   const isMermaid  = artifact.type === 'flowchart'
   const isMindmap  = artifact.type === 'mindmap'
   const isDocument = artifact.type === 'document'
@@ -179,10 +182,9 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
   function submitAiEdit() {
     const desc = aiEditText.trim()
     if (!desc || !onRequestAiEdit) return
-    const typeLabel = info.label
     const currentCode = isDocument ? (artifact.content || '') : (artifact.code || '')
-    const codeBlock = currentCode ? `\n\n当前内容：\n\`\`\`\n${currentCode}\n\`\`\`` : ''
-    onRequestAiEdit(`帮我修改「${artifact.title}」这个${typeLabel}：${desc}${codeBlock}\n\n请直接输出完整的修改后内容作为新的 ${typeLabel} artifact。`)
+    const codeBlock = currentCode ? t('artifact.currentContent', { code: currentCode }) : ''
+    onRequestAiEdit(t('artifact.aiModifyRequest', { title: artifact.title, type: typeLabel, desc, codeBlock }))
     cancelEdit()
   }
   function saveEdit() {
@@ -217,14 +219,14 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
               <Icon size={15} color={info.color} />
               {artifact.title}
-              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5, background: info.bg, color: info.color, fontWeight: 600 }}>{info.label}</span>
+              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5, background: info.bg, color: info.color, fontWeight: 600 }}>{typeLabel}</span>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
               {isMermaid && (
                 <>
-                  <button onClick={() => setTransformFs(t => ({ ...t, scale: t.scale * 1.25 }))} style={iconBtn} title="放大"><ZoomIn size={15} /></button>
-                  <button onClick={() => setTransformFs(t => ({ ...t, scale: t.scale * 0.8 }))} style={iconBtn} title="缩小"><ZoomOut size={15} /></button>
-                  <button onClick={() => setTransformFs({ x: 0, y: 0, scale: 1 })} style={iconBtn} title="重置"><RotateCcw size={15} /></button>
+                  <button onClick={() => setTransformFs(s => ({ ...s, scale: s.scale * 1.25 }))} style={iconBtn} title={t('artifact.zoomIn')}><ZoomIn size={15} /></button>
+                  <button onClick={() => setTransformFs(s => ({ ...s, scale: s.scale * 0.8 }))} style={iconBtn} title={t('artifact.zoomOut')}><ZoomOut size={15} /></button>
+                  <button onClick={() => setTransformFs({ x: 0, y: 0, scale: 1 })} style={iconBtn} title={t('artifact.reset')}><RotateCcw size={15} /></button>
                 </>
               )}
               <button onClick={() => setFullscreen(false)} style={{ ...iconBtn, marginLeft: 4 }}><X size={16} /></button>
@@ -245,7 +247,7 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
                 <div style={{ transform: `translate(${transformFs.x}px, ${transformFs.y}px) scale(${transformFs.scale})`, transformOrigin: '0 0' }}>
                   {fullscreenSvg
                     ? <div dangerouslySetInnerHTML={{ __html: fullscreenSvg }} />
-                    : <div style={{ padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>渲染中…</div>
+                    : <div style={{ padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>{t('artifact.rendering')}</div>
                   }
                 </div>
               </div>
@@ -270,31 +272,31 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
             <Icon size={14} color={info.color} />
             <span>{artifact.title}</span>
             <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5, background: 'rgba(255,255,255,0.8)', color: info.color, fontWeight: 600, border: `1px solid ${info.color}33` }}>
-              {info.label}
+              {typeLabel}
             </span>
           </div>
           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             {!editMode && isMermaid && mermaidRendered && (
               <>
-                <button onClick={() => setTransform(t => ({ ...t, scale: t.scale * 1.25 }))} style={iconBtn} title="放大"><ZoomIn size={12} /></button>
-                <button onClick={() => setTransform(t => ({ ...t, scale: t.scale * 0.8 }))} style={iconBtn} title="缩小"><ZoomOut size={12} /></button>
-                <button onClick={() => setTransform({ x: 0, y: 0, scale: 1 })} style={iconBtn} title="重置"><RotateCcw size={12} /></button>
-                <button onClick={exportSVG} style={iconBtn} title="导出 SVG"><Download size={12} /></button>
+                <button onClick={() => setTransform(s => ({ ...s, scale: s.scale * 1.25 }))} style={iconBtn} title={t('artifact.zoomIn')}><ZoomIn size={12} /></button>
+                <button onClick={() => setTransform(s => ({ ...s, scale: s.scale * 0.8 }))} style={iconBtn} title={t('artifact.zoomOut')}><ZoomOut size={12} /></button>
+                <button onClick={() => setTransform({ x: 0, y: 0, scale: 1 })} style={iconBtn} title={t('artifact.reset')}><RotateCcw size={12} /></button>
+                <button onClick={exportSVG} style={iconBtn} title={t('artifact.exportSvg')}><Download size={12} /></button>
               </>
             )}
             {!editMode && (isMindmap || isMermaid || isDocument) && (
-              <button onClick={() => setFullscreen(true)} style={iconBtn} title="全屏"><Maximize2 size={12} /></button>
+              <button onClick={() => setFullscreen(true)} style={iconBtn} title={t('artifact.fullscreen')}><Maximize2 size={12} /></button>
             )}
             {!editMode && onUpdate && (
               <button onClick={enterEdit} style={{ ...actionBtn, marginLeft: 4 }}>
-                <Pencil size={11} />{isMermaid ? '编辑代码' : '编辑'}
+                <Pencil size={11} />{isMermaid ? t('artifact.editCode') : t('artifact.edit')}
               </button>
             )}
             {editMode && (
               <>
                 {onRequestAiEdit && !isDocument && (
                   <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)', marginRight: 4 }}>
-                    {[['code', '代码'], ['ai', 'AI 修改']].map(([mode, label]) => (
+                    {[['code', t('artifact.codeTab')], ['ai', t('artifact.aiTab')]].map(([mode, label]) => (
                       <button key={mode} onClick={() => setEditSubMode(mode)} style={{
                         fontSize: 10, padding: '3px 8px', cursor: 'pointer', border: 'none',
                         background: editSubMode === mode ? 'var(--accent)' : 'var(--bg-hover)',
@@ -303,15 +305,15 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
                     ))}
                   </div>
                 )}
-                <button onClick={cancelEdit} style={cancelBtn}><X size={11} /> 取消</button>
+                <button onClick={cancelEdit} style={cancelBtn}><X size={11} /> {t('artifact.cancel')}</button>
                 {editSubMode === 'ai'
-                  ? <button onClick={submitAiEdit} disabled={!aiEditText.trim()} style={{ ...saveBtn, background: aiEditText.trim() ? 'var(--accent)' : 'var(--bg-hover)', color: aiEditText.trim() ? 'white' : 'var(--text-muted)' }}><Check size={11} /> 发送给 AI</button>
-                  : <button onClick={saveEdit} style={saveBtn}><Check size={11} /> 保存</button>
+                  ? <button onClick={submitAiEdit} disabled={!aiEditText.trim()} style={{ ...saveBtn, background: aiEditText.trim() ? 'var(--accent)' : 'var(--bg-hover)', color: aiEditText.trim() ? 'white' : 'var(--text-muted)' }}><Check size={11} /> {t('artifact.sendToAi')}</button>
+                  : <button onClick={saveEdit} style={saveBtn}><Check size={11} /> {t('artifact.save')}</button>
                 }
               </>
             )}
             {!editMode && onSave && (
-              <button onClick={() => onSave(artifact)} style={{ ...actionBtn, marginLeft: 4 }}>↓ 存入项目</button>
+              <button onClick={() => onSave(artifact)} style={{ ...actionBtn, marginLeft: 4 }}>{t('artifact.saveToProject')}</button>
             )}
           </div>
         </div>
@@ -327,7 +329,7 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
                 value={aiEditText}
                 onChange={e => setAiEditText(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitAiEdit() } if (e.key === 'Escape') cancelEdit() }}
-                placeholder={`描述你想对这个${info.label}做的修改…\n例如：把流程图改成从左到右布局；在脑图里增加一个"风险"分支`}
+                placeholder={t('artifact.aiEditPlaceholder', { type: typeLabel })}
                 rows={4}
                 style={{
                   width: '100%', padding: '10px 12px', background: 'var(--bg-input)',
@@ -336,7 +338,7 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
                   lineHeight: 1.65, resize: 'vertical', outline: 'none', boxSizing: 'border-box',
                 }}
               />
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Enter 发送 · Shift+Enter 换行 · Esc 取消</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t('artifact.aiEditHint')}</div>
             </div>
           )}
 
@@ -351,9 +353,9 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
                   if (isMermaid) updateFlowchartPreview(e.target.value)
                 }}
                 placeholder={
-                  isMindmap  ? '# 主题\n## 分支1\n### 子项A\n### 子项B\n## 分支2\n### 子项C'
-                  : isMermaid ? 'graph TD\n  A[开始] --> B{判断}\n  B -->|是| C[处理]\n  B -->|否| D[结束]'
-                  : '# 标题\n\n正文段落…\n\n## 小节\n\n- 列表项'
+                  isMindmap  ? t('artifact.mindmapPlaceholder')
+                  : isMermaid ? t('artifact.flowchartPlaceholder')
+                  : t('artifact.documentPlaceholder')
                 }
                 style={{
                   flex: 1, padding: '10px 12px',
@@ -372,7 +374,7 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
                 {isMermaid && (
                   previewSvg
                     ? <div dangerouslySetInnerHTML={{ __html: previewSvg }} style={{ padding: 12 }} />
-                    : <div style={{ padding: 12, fontSize: 12, color: 'var(--text-muted)', paddingTop: 24 }}>修改代码后自动预览…</div>
+                    : <div style={{ padding: 12, fontSize: 12, color: 'var(--text-muted)', paddingTop: 24 }}>{t('artifact.previewHint')}</div>
                 )}
                 {isMindmap && <MarkmapViewer markdown={draft} minHeight={240} />}
                 {isDocument && (
@@ -380,7 +382,7 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
                     ? <div className="md" style={{ fontSize: 13, lineHeight: 1.75 }}>
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{draft}</ReactMarkdown>
                       </div>
-                    : <div style={{ fontSize: 12, color: 'var(--text-muted)', paddingTop: 8 }}>输入 Markdown 后实时预览…</div>
+                    : <div style={{ fontSize: 12, color: 'var(--text-muted)', paddingTop: 8 }}>{t('artifact.previewMd')}</div>
                 )}
               </div>
             </div>
@@ -406,12 +408,12 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
                 </div>
                 {!mermaidRendered && (
                   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
-                    渲染中…
+                    {t('artifact.rendering')}
                   </div>
                 )}
               </div>
               <div style={{ textAlign: 'center', padding: '6px 0 10px', fontSize: 10, color: 'var(--text-muted)' }}>
-                滚轮缩放 · 拖拽平移
+                {t('artifact.scrollHint')}
               </div>
             </div>
           )}
@@ -430,7 +432,7 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{artifact.content}</ReactMarkdown>
                 </div>
               : <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                  空文档，点击编辑添加内容。
+                  {t('artifact.emptyDoc')}
                 </div>
           )}
         </div>

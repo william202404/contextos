@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X, Sparkles, Plus, Check, Loader } from 'lucide-react'
 import { streamMessage, DEFAULT_MODEL } from '../lib/llm'
 import { saveProject } from '../store/db'
+import { useTranslation } from 'react-i18next'
 
 const DECOMPOSE_SYSTEM = `你是一个目标拆解专家。用户描述一个大目标，你将其拆分为 3-6 个可独立执行的子项目。
 
@@ -16,6 +17,7 @@ const DECOMPOSE_SYSTEM = `你是一个目标拆解专家。用户描述一个大
 [{"name":"需求分析","summary":"收集用户需求，整理核心功能清单","icon":"📋"},{"name":"界面设计","summary":"制作交互原型和视觉稿","icon":"🎨"}]`
 
 export default function DecomposeModal({ onClose, onCreated }) {
+  const { t } = useTranslation()
   const [goal, setGoal] = useState('')
   const [status, setStatus] = useState('idle') // idle | loading | done | error
   const [subProjects, setSubProjects] = useState([])
@@ -47,12 +49,12 @@ export default function DecomposeModal({ onClose, onCreated }) {
           setStatus('done')
         } catch {
           setStatus('error')
-          setErrorMsg('AI 返回格式异常，请重试或换一种描述方式')
+          setErrorMsg(t('decompose.retryTip'))
         }
       },
       onError: (e) => {
         setStatus('error')
-        setErrorMsg(e?.message?.includes('401') ? 'API Key 无效，请在设置中配置' : (e?.message || '请求失败，请检查网络和 API Key'))
+        setErrorMsg(e?.message?.includes('401') ? t('decompose.apiKeyError') : (e?.message || t('decompose.networkError')))
       },
     })
   }
@@ -74,7 +76,7 @@ export default function DecomposeModal({ onClose, onCreated }) {
     for (const p of toCreate) {
       await saveProject({
         id: crypto.randomUUID(),
-        name: p.name || '新项目',
+        name: p.name || t('overview.newProject'),
         status: '',
         knowledge: p.summary || '',
         icon: p.icon || '📁',
@@ -100,8 +102,8 @@ export default function DecomposeModal({ onClose, onCreated }) {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
           <div>
-            <h2 style={{ fontSize: 17, fontWeight: 700, margin: '0 0 4px', color: 'var(--text-primary)' }}>一键拆解目标</h2>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>描述你的大目标，AI 自动拆解为可执行的子项目</div>
+            <h2 style={{ fontSize: 17, fontWeight: 700, margin: '0 0 4px', color: 'var(--text-primary)' }}>{t('decompose.title')}</h2>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>{t('decompose.subtitle')}</div>
           </div>
           <button onClick={onClose} style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', borderRadius: 8, flexShrink: 0 }}>
             <X size={16} />
@@ -112,7 +114,7 @@ export default function DecomposeModal({ onClose, onCreated }) {
         <textarea
           value={goal}
           onChange={e => setGoal(e.target.value)}
-          placeholder="例如：我想做一个副业，开发一款记账 App，需要有录入收支、统计报表、多账本支持……"
+          placeholder={t('decompose.inputPlaceholder')}
           disabled={status === 'loading'}
           onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleDecompose() }}
           onFocus={e => { e.target.style.borderColor = 'var(--accent)' }}
@@ -127,7 +129,7 @@ export default function DecomposeModal({ onClose, onCreated }) {
         />
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, marginBottom: 4 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Cmd/Ctrl + Enter 快速拆解</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('decompose.shortcutHint')}</span>
           <button
             onClick={handleDecompose}
             disabled={isDisabled}
@@ -141,8 +143,8 @@ export default function DecomposeModal({ onClose, onCreated }) {
             }}
           >
             {status === 'loading'
-              ? <><Loader size={13} style={{ animation: 'spin 0.9s linear infinite' }} />拆解中…</>
-              : <><Sparkles size={13} />AI 拆解</>
+              ? <><Loader size={13} style={{ animation: 'spin 0.9s linear infinite' }} />{t('decompose.decomposing')}</>
+              : <><Sparkles size={13} />{t('decompose.aiDecompose')}</>
             }
           </button>
         </div>
@@ -158,7 +160,7 @@ export default function DecomposeModal({ onClose, onCreated }) {
         {status === 'done' && subProjects.length > 0 && (
           <div style={{ marginTop: 22, animation: 'slide-up 0.3s ease-out' }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              拆解结果 · {subProjects.length} 个子项目
+              {t('decompose.resultTitle', { count: subProjects.length })}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -195,12 +197,12 @@ export default function DecomposeModal({ onClose, onCreated }) {
             {/* Footer actions */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>已选 {selected.size} / {subProjects.length}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('decompose.selected', { selected: selected.size, total: subProjects.length })}</span>
                 <button
                   onClick={() => setSelected(prev => prev.size === subProjects.length ? new Set() : new Set(subProjects.map((_, i) => i)))}
                   style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)' }}
                 >
-                  {selected.size === subProjects.length ? '取消全选' : '全选'}
+                  {selected.size === subProjects.length ? t('decompose.deselectAll') : t('decompose.selectAll')}
                 </button>
               </div>
               <button
@@ -216,7 +218,7 @@ export default function DecomposeModal({ onClose, onCreated }) {
                 }}
               >
                 <Plus size={14} />
-                {creating ? '创建中…' : `一键创建 ${selected.size} 个项目`}
+                {creating ? t('decompose.creating') : t('decompose.createCount', { count: selected.size })}
               </button>
             </div>
           </div>

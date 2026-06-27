@@ -1,17 +1,18 @@
 import { useRef, useState, useEffect } from 'react'
 import { Paperclip, Network, GitBranch, FileText, ArrowUp, BookOpen, FolderPlus, Trash2, NotebookPen, Folder } from 'lucide-react'
-
-const SLASH_COMMANDS = [
-  { cmd: 'summary', label: '/总结',   icon: FileText,   desc: '生成 / 更新项目摘要' },
-  { cmd: 'memory',  label: '/记忆',   icon: BookOpen,   desc: '查看当前项目记忆' },
-  { cmd: 'project', label: '/新项目', icon: FolderPlus, desc: '将对话升级为正式项目' },
-  { cmd: 'clear',   label: '/清除',   icon: Trash2,     desc: '清空当前对话消息' },
-]
+import { useTranslation } from 'react-i18next'
 
 export default function InputBar({
   onSend, onFileUpload, disabled, tokenPercent = 0, messageCount = 0,
   onCommand, onNewNote,
 }) {
+  const { t } = useTranslation()
+  const SLASH_COMMANDS = [
+    { cmd: 'summary', label: t('inputBar.slashSummary'),  icon: FileText,   desc: t('inputBar.slashSummaryDesc') },
+    { cmd: 'memory',  label: t('inputBar.slashMemory'),   icon: BookOpen,   desc: t('inputBar.slashMemoryDesc') },
+    { cmd: 'project', label: t('inputBar.slashProject'),  icon: FolderPlus, desc: t('inputBar.slashProjectDesc') },
+    { cmd: 'clear',   label: t('inputBar.slashClear'),    icon: Trash2,     desc: t('inputBar.slashClearDesc') },
+  ]
   const [text, setText] = useState('')
   const [showSlash, setShowSlash] = useState(false)
   const [outputFormat, setOutputFormat] = useState(null)
@@ -77,9 +78,9 @@ export default function InputBar({
 
     let finalText = trimmed
     if (outputFormat === 'mindmap') {
-      finalText = trimmed ? `${trimmed}\n帮我生成一个脑图，梳理以上内容的结构。` : '帮我生成一个脑图：'
+      finalText = trimmed ? `${trimmed}\n${t('inputBar.mindmapPrompt')}` : t('inputBar.mindmapStart')
     } else if (outputFormat === 'flowchart') {
-      finalText = trimmed ? `${trimmed}\n帮我生成一个流程图，描述以上内容的流程。` : '帮我生成一个流程图：'
+      finalText = trimmed ? `${trimmed}\n${t('inputBar.flowchartPrompt')}` : t('inputBar.flowchartStart')
     }
 
     onSend(finalText)
@@ -132,7 +133,7 @@ export default function InputBar({
             fontSize: 10, fontWeight: 600, color: 'var(--text-muted)',
             padding: '4px 10px 6px', textTransform: 'uppercase', letterSpacing: '0.06em',
           }}>
-            快捷指令
+            {t('inputBar.quickCommands')}
           </div>
           {filteredCommands.map((cmd, i) => {
             const Icon = cmd.icon
@@ -180,14 +181,14 @@ export default function InputBar({
 
       {/* Tool row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, position: 'relative' }}>
-        <label style={toolBtnStyle} title="上传文件（支持 txt/md/pdf/docx/xlsx/pptx/图片等）">
+        <label style={toolBtnStyle}>
           <Paperclip size={13} />
-          文件
+          {t('inputBar.file')}
           <input type="file" multiple style={{ display: 'none' }} onChange={handleFileChange} />
         </label>
-        <label style={toolBtnStyle} title="上传文件夹（自动读取其中所有文本文件）">
+        <label style={toolBtnStyle}>
           <Folder size={13} />
-          文件夹
+          {t('inputBar.folder')}
           <input type="file" webkitdirectory="" multiple style={{ display: 'none' }} onChange={handleFileChange} />
         </label>
         <button
@@ -195,27 +196,25 @@ export default function InputBar({
             ...toolBtnStyle,
             ...(outputFormat === 'mindmap' ? { background: 'var(--accent-glow)', borderColor: 'var(--accent)', color: 'var(--accent)' } : {}),
           }}
-          title="生成脑图"
           onClick={() => { setOutputFormat(f => f === 'mindmap' ? null : 'mindmap'); textareaRef.current?.focus() }}
         >
           <Network size={13} />
-          脑图
+          {t('inputBar.mindmap')}
         </button>
         <button
           style={{
             ...toolBtnStyle,
             ...(outputFormat === 'flowchart' ? { background: 'var(--accent-glow)', borderColor: 'var(--accent)', color: 'var(--accent)' } : {}),
           }}
-          title="生成流程图"
           onClick={() => { setOutputFormat(f => f === 'flowchart' ? null : 'flowchart'); textareaRef.current?.focus() }}
         >
           <GitBranch size={13} />
-          流程图
+          {t('inputBar.flowchart')}
         </button>
         {onNewNote && (
-          <button style={toolBtnStyle} title="新建笔记" onClick={onNewNote}>
+          <button style={toolBtnStyle} onClick={onNewNote}>
             <NotebookPen size={13} />
-            笔记
+            {t('inputBar.note')}
           </button>
         )}
       </div>
@@ -237,7 +236,7 @@ export default function InputBar({
           value={text}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder="输入消息，或 / 查看快捷指令…"
+          placeholder={t('inputBar.placeholder')}
           disabled={disabled}
           style={{
             flex: 1, background: 'transparent', border: 'none', outline: 'none',
@@ -265,8 +264,8 @@ export default function InputBar({
 
       <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
         {messageCount > 0
-          ? `${messageCount} 条消息 · 上下文 ${tokenPercent > 0 ? tokenPercent + '%' : '<1%'}${tokenPercent > 70 ? ' · 建议更新项目摘要' : ''}`
-          : 'Enter 发送 · Shift+Enter 换行 · / 快捷指令'}
+          ? t('inputBar.messageStats', { count: messageCount, percent: tokenPercent > 0 ? tokenPercent + '%' : '<1%' }) + (tokenPercent > 70 ? t('inputBar.contextWarning') : '')
+          : t('inputBar.hint')}
       </div>
     </div>
   )

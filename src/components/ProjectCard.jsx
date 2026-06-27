@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Archive } from 'lucide-react'
 import { getProjectStats } from '../store/db'
+import i18n from '../i18n'
 
 export default function ProjectCard({ project, onDelete, onArchive }) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [hovered, setHovered] = useState(false)
   const [stats, setStats] = useState({ rounds: null, fileCount: null })
 
@@ -61,7 +64,7 @@ export default function ProjectCard({ project, onDelete, onArchive }) {
                 style={{ width: 20, height: 20, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, padding: 0, transition: 'color 0.15s' }}
                 onMouseEnter={e => { e.stopPropagation(); e.currentTarget.style.color = 'var(--amber)' }}
                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)' }}
-                title="归档项目"
+                title={t('projectCard.archive')}
               >
                 <Archive size={11} />
               </button>
@@ -72,7 +75,7 @@ export default function ProjectCard({ project, onDelete, onArchive }) {
                 style={{ width: 20, height: 20, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, fontSize: 11, padding: 0, transition: 'color 0.15s' }}
                 onMouseEnter={e => { e.stopPropagation(); e.currentTarget.style.color = 'var(--red)' }}
                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)' }}
-                title="删除项目"
+                title={t('projectCard.delete')}
               >
                 ✕
               </button>
@@ -85,7 +88,7 @@ export default function ProjectCard({ project, onDelete, onArchive }) {
               ? { background: 'rgba(52,211,153,0.12)', color: 'var(--green)' }
               : { background: 'rgba(251,191,36,0.12)', color: 'var(--amber)' }),
           }}>
-            {isActive ? '进行中' : '暂停'}
+            {isActive ? t('projectCard.active') : t('projectCard.paused')}
           </span>
         )}
       </div>
@@ -95,12 +98,12 @@ export default function ProjectCard({ project, onDelete, onArchive }) {
         fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55, marginBottom: 12, minHeight: 32,
         display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
       }}>
-        {displayText || <span style={{ color: 'var(--text-muted)' }}>暂无摘要</span>}
+        {displayText || <span style={{ color: 'var(--text-muted)' }}>{t('projectCard.noSummary')}</span>}
       </div>
 
       {/* Context depth bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500, flexShrink: 0 }}>上下文</span>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500, flexShrink: 0 }}>{t('projectCard.context')}</span>
         <div style={{ flex: 1, height: 3, background: 'var(--bg-hover)', borderRadius: 2, overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${tokenPercent}%`, background: 'var(--teal)', borderRadius: 2, transition: 'width 0.4s ease' }} />
         </div>
@@ -114,15 +117,15 @@ export default function ProjectCard({ project, onDelete, onArchive }) {
         <div style={{ display: 'flex', gap: 10 }}>
           <span style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>{stats.rounds ?? '—'}</span>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>轮</span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t('projectCard.rounds')}</span>
           </span>
           <span style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>{stats.fileCount ?? '—'}</span>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>文件</span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t('projectCard.files')}</span>
           </span>
           <span style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>{knowledgeCount}</span>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>知识</span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t('projectCard.knowledge')}</span>
           </span>
         </div>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
@@ -135,10 +138,12 @@ export default function ProjectCard({ project, onDelete, onArchive }) {
 
 function formatTime(ts) {
   if (!ts) return ''
+  const t = i18n.t.bind(i18n)
   const diff = Date.now() - ts
-  if (diff < 60_000) return '刚刚'
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}分钟前`
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}小时前`
-  if (diff < 604_800_000) return `${Math.floor(diff / 86_400_000)}天前`
-  return new Date(ts).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
+  if (diff < 60_000) return t('time.justNow')
+  if (diff < 3_600_000) return t('time.minutesAgo', { count: Math.floor(diff / 60_000) })
+  if (diff < 86_400_000) return t('time.hoursAgo', { count: Math.floor(diff / 3_600_000) })
+  if (diff < 604_800_000) return t('time.daysAgo', { count: Math.floor(diff / 86_400_000) })
+  const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US'
+  return new Date(ts).toLocaleDateString(locale, { month: 'numeric', day: 'numeric' })
 }

@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { Search, X } from 'lucide-react'
 import { searchAll } from '../store/db'
+import { useTranslation } from 'react-i18next'
 
 export default function SearchModal({ onClose, onNavigate }) {
+  const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState({ projects: [], messages: [] })
   const [loading, setLoading] = useState(false)
@@ -53,7 +55,7 @@ export default function SearchModal({ onClose, onNavigate }) {
             ref={inputRef}
             value={query}
             onChange={handleChange}
-            placeholder="搜索项目、对话内容…"
+            placeholder={t('search.placeholder')}
             style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 15, color: 'var(--text-primary)', fontFamily: 'inherit' }}
           />
           {query && (
@@ -69,12 +71,12 @@ export default function SearchModal({ onClose, onNavigate }) {
         {(hasResults || loading) && (
           <div style={{ maxHeight: 420, overflowY: 'auto', padding: '8px 0' }}>
             {loading && !hasResults && (
-              <div style={{ padding: '20px', textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>搜索中…</div>
+              <div style={{ padding: '20px', textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>{t('search.searching')}</div>
             )}
 
             {results.projects.length > 0 && (
               <>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '6px 16px 4px' }}>项目</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '6px 16px 4px' }}>{t('search.projects')}</div>
                 {results.projects.map(p => (
                   <div key={p.id} onClick={() => onNavigate(p.id)}
                     style={{ padding: '9px 16px', cursor: 'pointer', transition: 'background 0.1s' }}
@@ -94,7 +96,7 @@ export default function SearchModal({ onClose, onNavigate }) {
 
             {results.messages.length > 0 && (
               <>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '6px 16px 4px', marginTop: results.projects.length ? 4 : 0 }}>对话内容</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '6px 16px 4px', marginTop: results.projects.length ? 4 : 0 }}>{t('search.messages')}</div>
                 {results.messages.map(m => (
                   <div key={m.id} onClick={() => onNavigate(m.projectId)}
                     style={{ padding: '9px 16px', cursor: 'pointer', transition: 'background 0.1s' }}
@@ -103,7 +105,7 @@ export default function SearchModal({ onClose, onNavigate }) {
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
                       <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: m.role === 'user' ? 'var(--accent-glow)' : 'var(--green-bg)', color: m.role === 'user' ? 'var(--accent)' : 'var(--green)' }}>
-                        {m.role === 'user' ? '我' : 'AI'}
+                        {m.role === 'user' ? t('search.me') : 'AI'}
                       </span>
                       {m.projectName && (
                         <span style={{ fontSize: 10, color: 'var(--text-muted)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -111,7 +113,7 @@ export default function SearchModal({ onClose, onNavigate }) {
                         </span>
                       )}
                       <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }}>
-                        {new Date(m.timestamp).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+                        {new Date(m.timestamp).toLocaleDateString()}
                       </span>
                     </div>
                     <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{m.excerpt}</div>
@@ -122,7 +124,7 @@ export default function SearchModal({ onClose, onNavigate }) {
 
             {!loading && query && !hasResults && (
               <div style={{ padding: '24px 16px', textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>
-                没有找到"<span style={{ color: 'var(--text-primary)' }}>{query}</span>"相关内容
+                {t('search.noResults', { query })}
               </div>
             )}
           </div>
@@ -130,7 +132,7 @@ export default function SearchModal({ onClose, onNavigate }) {
 
         {!query && (
           <div style={{ padding: '20px 16px', fontSize: 12.5, color: 'var(--text-muted)', textAlign: 'center' }}>
-            输入关键词搜索项目名称和对话内容
+            {t('search.hint')}
           </div>
         )}
       </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plug, Sparkles, LayoutDashboard, FolderOpen, MessageSquare, Settings, Search, ExternalLink, Cpu, Globe, Terminal, CheckCircle, Loader } from 'lucide-react'
 import { DEMO_SERVERS, searchMCPServers, getConnectedServers, saveConnectedServer, removeConnectedServer } from '../lib/mcp'
@@ -6,6 +6,8 @@ import { BUILTIN_SKILLS, installSkillFull } from '../lib/skills'
 import { saveProject } from '../store/db'
 import { DEFAULT_MODEL } from '../lib/llm'
 import SettingsModal, { getUserProfile } from '../components/SettingsModal'
+import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
 
 const CATEGORIES = ['全部', '搜索', '开发']
 
@@ -27,6 +29,7 @@ const AGENT_TEMPLATES = [
 ]
 
 export default function MCPPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [activeCategory, setActiveCategory] = useState('全部')
   const [search, setSearch] = useState('')
@@ -40,12 +43,12 @@ export default function MCPPage() {
   const [keyModal, setKeyModal] = useState(null) // null | { server, value }
   const profile = getUserProfile()
   const displayName = profile.name || 'ContextOS'
-  const displayRole = profile.role || '欢迎使用'
+  const displayRole = profile.role || t('nav.welcome')
 
-  // 防抖：300ms 后才更新 debouncedSearch
+  // debounce: 300ms delay
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(timer)
   }, [search])
 
   const fetchServers = useCallback(async (q, cat) => {
@@ -66,7 +69,6 @@ export default function MCPPage() {
 
   function handleConnect(server) {
     if (server.keyStore && !localStorage.getItem(server.keyStore)) {
-      // keyOptional: prompt but allow skipping; !keyOptional: must fill
       setKeyModal({ server, value: '' })
       return
     }
@@ -95,12 +97,10 @@ export default function MCPPage() {
     if (deploying) return
     setDeploying(template.id)
     try {
-      // Install skills
       for (const skillId of template.skillIds) {
         const skill = BUILTIN_SKILLS.find(s => s.id === skillId)
         if (skill) await installSkillFull(skill)
       }
-      // Connect MCP servers
       for (const serverId of template.mcpServerIds) {
         const server = DEMO_SERVERS.find(s => s.id === serverId)
         if (server) {
@@ -108,7 +108,6 @@ export default function MCPPage() {
           setConnectedIds(prev => new Set([...prev, server.id]))
         }
       }
-      // Create project
       const projectId = crypto.randomUUID()
       const now = Date.now()
       await saveProject({
@@ -127,6 +126,7 @@ export default function MCPPage() {
   }
 
   const connectedCount = connectedIds.size
+  const sep = i18n.language === 'zh' ? '、' : ', '
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>
@@ -152,13 +152,13 @@ export default function MCPPage() {
         </div>
 
         <nav style={{ padding: '0 10px', flex: 1, WebkitAppRegion: 'no-drag' }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', padding: '0 8px', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>工作台</div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', padding: '0 8px', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('nav.workbench')}</div>
           {[
-            { icon: <LayoutDashboard size={15} />, label: '概览', path: '/' },
-            { icon: <FolderOpen size={15} />, label: '项目空间', path: '/' },
-            { icon: <MessageSquare size={15} />, label: '对话', path: '/' },
-            { icon: <Sparkles size={15} />, label: '技能', path: '/skills' },
-            { icon: <Plug size={15} />, label: 'MCP 工具', path: '/mcp', active: true },
+            { icon: <LayoutDashboard size={15} />, label: t('nav.overview'), path: '/' },
+            { icon: <FolderOpen size={15} />, label: t('nav.projects'), path: '/' },
+            { icon: <MessageSquare size={15} />, label: t('nav.conversations'), path: '/' },
+            { icon: <Sparkles size={15} />, label: t('nav.skills'), path: '/skills' },
+            { icon: <Plug size={15} />, label: t('nav.mcp'), path: '/mcp', active: true },
           ].map(item => (
             <div key={item.label} onClick={() => navigate(item.path)} style={{
               display: 'flex', alignItems: 'center', gap: 9,
@@ -182,10 +182,10 @@ export default function MCPPage() {
             background: 'var(--accent-glow)', border: '1px solid var(--border)',
           }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', marginBottom: 4 }}>
-              {connectedCount} 个工具已连接
+              {t('mcp.connectedCount', { count: connectedCount })}
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-              {getConnectedServers().map(s => s.name).join('、')}
+              {getConnectedServers().map(s => s.name).join(sep)}
             </div>
           </div>
         )}
@@ -223,8 +223,8 @@ export default function MCPPage() {
               <Plug size={20} color="white" />
             </div>
             <div>
-              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>MCP 工具市场</h1>
-              <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>连接外部工具，让 AI 真正帮你执行任务</p>
+              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{t('mcp.pageTitle')}</h1>
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>{t('mcp.pageDesc')}</p>
             </div>
           </div>
 
@@ -237,7 +237,7 @@ export default function MCPPage() {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="搜索 MCP 工具…"
+              placeholder={t('mcp.searchPlaceholder')}
               style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 13, fontFamily: 'inherit' }}
             />
             {loading && <Loader size={13} color="var(--text-muted)" style={{ animation: 'spin 1s linear infinite' }} />}
@@ -259,11 +259,11 @@ export default function MCPPage() {
         {/* MCP Server grid */}
         <section style={{ marginBottom: 48 }}>
           <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            可用工具 · {servers.length}
+            {t('mcp.availableTools', { count: servers.length })}
           </h2>
           {servers.length === 0 && !loading && (
             <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: 13 }}>
-              未找到匹配的工具
+              {t('mcp.noTools')}
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
@@ -285,11 +285,11 @@ export default function MCPPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Cpu size={16} color="var(--accent)" />
             <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              自治域模板
+              {t('mcp.agentTemplates')}
             </h2>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
-            预配置的 AI 智能体，一键安装所需技能和工具并创建专属项目。
+            {t('mcp.agentTemplatesDesc')}
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
             {AGENT_TEMPLATES.map(template => (
@@ -306,7 +306,7 @@ export default function MCPPage() {
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
 
-      {/* API Key 配置弹窗 */}
+      {/* API Key modal */}
       {keyModal && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
@@ -318,12 +318,12 @@ export default function MCPPage() {
             boxShadow: 'var(--shadow-lg)',
           }}>
             <h3 style={{ margin: '0 0 8px', fontSize: 16, color: 'var(--text-primary)', fontWeight: 700 }}>
-              {keyModal.server.icon} 配置 {keyModal.server.name}
+              {keyModal.server.icon} {i18n.t('mcp.keyModalTitle', { name: keyModal.server.name })}
             </h3>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 16px', lineHeight: 1.65 }}>
               {keyModal.server.keyOptional
-                ? 'API Key 可选。不填也可以直接连接，但会受到速率限制（每小时 60 次请求）。填写后获得更高配额，Key 仅存储在本地设备。'
-                : '需要 API Key 才能获取真实数据。Key 仅保存在你的本地设备，不会上传到任何服务器。'
+                ? i18n.t('mcp.keyOptionalDesc')
+                : i18n.t('mcp.keyRequiredDesc')
               }
             </p>
             <div style={{ marginBottom: 20 }}>
@@ -336,7 +336,7 @@ export default function MCPPage() {
                 value={keyModal.value}
                 onChange={e => setKeyModal(prev => ({ ...prev, value: e.target.value }))}
                 onKeyDown={e => e.key === 'Enter' && handleKeySubmit()}
-                placeholder={keyModal.server.keyOptional ? '粘贴 Token（可跳过）…' : '粘贴你的 API Key…'}
+                placeholder={keyModal.server.keyOptional ? i18n.t('mcp.pastePlaceholderOptional') : i18n.t('mcp.pastePlaceholder')}
                 style={{
                   width: '100%', padding: '9px 12px', borderRadius: 9, fontSize: 13,
                   background: 'var(--bg-input)', border: '1px solid var(--border)',
@@ -346,16 +346,16 @@ export default function MCPPage() {
               />
               {keyModal.server.id === 'brave-search' && (
                 <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0', lineHeight: 1.5 }}>
-                  没有 Key？访问{' '}
+                  {i18n.t('mcp.braveKeyHint')}{' '}
                   <a href="https://brave.com/search/api/" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
-                    brave.com/search/api
+                    {i18n.t('mcp.braveKeyLink')}
                   </a>
-                  {' '}免费注册，每月 2000 次免费查询。
+                  {' '}{i18n.t('mcp.braveKeyHint2')}
                 </p>
               )}
               {keyModal.server.id === 'github' && (
                 <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0', lineHeight: 1.5 }}>
-                  在 GitHub → Settings → Developer settings → Personal access tokens 生成，选 read-only 权限即可。
+                  {i18n.t('mcp.githubKeyHint')}
                 </p>
               )}
             </div>
@@ -364,13 +364,13 @@ export default function MCPPage() {
                 padding: '7px 16px', borderRadius: 8, fontSize: 12,
                 background: 'var(--bg-hover)', border: '1px solid var(--border)',
                 color: 'var(--text-secondary)', cursor: 'pointer',
-              }}>取消</button>
+              }}>{i18n.t('mcp.cancel')}</button>
               {keyModal.server.keyOptional && (
                 <button onClick={handleKeySkip} style={{
                   padding: '7px 16px', borderRadius: 8, fontSize: 12,
                   background: 'var(--bg-hover)', border: '1px solid var(--border)',
                   color: 'var(--text-secondary)', cursor: 'pointer',
-                }}>跳过，直接连接</button>
+                }}>{i18n.t('mcp.skipConnect')}</button>
               )}
               <button
                 onClick={handleKeySubmit}
@@ -381,7 +381,7 @@ export default function MCPPage() {
                   border: 'none', color: keyModal.value.trim() ? 'white' : 'var(--text-muted)',
                   cursor: keyModal.value.trim() ? 'pointer' : 'default', transition: 'all 0.15s',
                 }}
-              >保存并连接</button>
+              >{i18n.t('mcp.saveConnect')}</button>
             </div>
           </div>
         </div>
@@ -399,21 +399,20 @@ export default function MCPPage() {
             boxShadow: 'var(--shadow-lg)',
           }}>
             <h3 style={{ margin: '0 0 8px', fontSize: 16, color: 'var(--text-primary)', fontWeight: 700 }}>
-              {showGuide.icon} 本地工具 · {showGuide.name}
+              {showGuide.icon} {i18n.t('mcp.guideTitle', { name: showGuide.name })}
             </h3>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 16px', lineHeight: 1.65 }}>
-              这类工具需要在你的电脑后台运行对应服务才能使用。
-              <strong style={{ color: 'var(--text-secondary)' }}> ContextOS 正在开发内置支持</strong>，
-              届时无需任何配置即可直接使用。
+              {i18n.t('mcp.guideDescPart1')}
+              <strong style={{ color: 'var(--text-secondary)' }}> {i18n.t('mcp.guideDescBold')}</strong>
+              {i18n.t('mcp.guideDescPart2')}
             </p>
             <div style={{
               background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)',
               borderRadius: 10, padding: '12px 16px', marginBottom: 20,
               fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6,
             }}>
-              <div style={{ fontWeight: 600, color: 'var(--amber)', marginBottom: 4 }}>即将支持</div>
-              下一版本将支持在 ContextOS 内直接一键启动本地工具，无需手动安装或配置。
-              你可以关注版本更新，或点击下方「查看文档」了解此工具的功能。
+              <div style={{ fontWeight: 600, color: 'var(--amber)', marginBottom: 4 }}>{i18n.t('mcp.guideSoon')}</div>
+              {i18n.t('mcp.guideNextVersion')}
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <a
@@ -426,13 +425,13 @@ export default function MCPPage() {
                   background: 'var(--accent-glow)',
                 }}
               >
-                <ExternalLink size={11} /> 查看文档
+                <ExternalLink size={11} /> {i18n.t('mcp.viewDocs')}
               </a>
               <button onClick={() => setShowGuide(null)} style={{
                 padding: '6px 14px', borderRadius: 8, fontSize: 12,
                 background: 'var(--bg-hover)', border: '1px solid var(--border)',
                 color: 'var(--text-secondary)', cursor: 'pointer',
-              }}>关闭</button>
+              }}>{i18n.t('mcp.close')}</button>
             </div>
           </div>
         </div>
@@ -442,6 +441,7 @@ export default function MCPPage() {
 }
 
 function MCPCard({ server, connected, onConnect, onDisconnect, onShowGuide }) {
+  const { t } = useTranslation()
   const isHTTP = server.type === 'http'
   const needsKey = !!server.keyStore
   const hasKey = needsKey && !!localStorage.getItem(server.keyStore)
@@ -476,7 +476,7 @@ function MCPCard({ server, connected, onConnect, onDisconnect, onShowGuide }) {
                 fontSize: 10, padding: '1px 7px', borderRadius: 10, fontWeight: 600,
                 background: 'rgba(139,92,246,0.08)', color: 'var(--accent)',
                 border: '1px solid rgba(139,92,246,0.2)',
-              }}>{server.keyOptional ? '可选 Token' : '需要 API Key'}</span>
+              }}>{server.keyOptional ? t('mcp.optionalToken') : t('mcp.needsApiKey')}</span>
             )}
             {connected && (
               <CheckCircle size={13} color="var(--accent)" style={{ marginLeft: 'auto' }} />
@@ -487,7 +487,7 @@ function MCPCard({ server, connected, onConnect, onDisconnect, onShowGuide }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-        <span>{server.tools} 个工具</span>
+        <span>{server.tools}</span>
         {server.stars > 0 && <><span>·</span><span>★ {server.stars.toLocaleString()}</span></>}
         <div style={{ marginLeft: 'auto' }}>
           {isHTTP ? (
@@ -502,7 +502,7 @@ function MCPCard({ server, connected, onConnect, onDisconnect, onShowGuide }) {
                 transition: 'all 0.15s',
               }}
             >
-              {connected ? '✓ 已连接' : (needsKey && !hasKey && !server.keyOptional ? '配置 Key' : '连接')}
+              {connected ? t('mcp.connected') : (needsKey && !hasKey && !server.keyOptional ? t('mcp.configKey') : t('mcp.connect'))}
             </button>
           ) : (
             <button
@@ -513,7 +513,7 @@ function MCPCard({ server, connected, onConnect, onDisconnect, onShowGuide }) {
                 color: 'var(--text-secondary)', fontWeight: 500, transition: 'all 0.15s',
               }}
             >
-              查看详情
+              {t('mcp.viewDetail')}
             </button>
           )}
         </div>
@@ -523,6 +523,11 @@ function MCPCard({ server, connected, onConnect, onDisconnect, onShowGuide }) {
 }
 
 function AgentTemplateCard({ template, deploying, onDeploy }) {
+  const { t } = useTranslation()
+  const sep = i18n.language === 'zh' ? '、' : ', '
+  const toolNames = template.mcpServerIds.map(id => DEMO_SERVERS.find(s => s.id === id)?.name || id).join(sep)
+  const skillNames = template.skillIds.map(id => BUILTIN_SKILLS.find(s => s.id === id)?.name || id).join(sep)
+
   return (
     <div style={{
       background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -547,8 +552,8 @@ function AgentTemplateCard({ template, deploying, onDeploy }) {
       </div>
       <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>{template.desc}</p>
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <div>🔧 工具：{template.mcpServerIds.map(id => DEMO_SERVERS.find(s => s.id === id)?.name || id).join('、')}</div>
-        <div>✨ 技能：{template.skillIds.map(id => BUILTIN_SKILLS.find(s => s.id === id)?.name || id).join('、')}</div>
+        <div>{t('mcp.toolsList', { names: toolNames })}</div>
+        <div>{t('mcp.skillsList', { names: skillNames })}</div>
       </div>
       <button
         onClick={onDeploy}
@@ -563,9 +568,9 @@ function AgentTemplateCard({ template, deploying, onDeploy }) {
         }}
       >
         {deploying ? (
-          <><Loader size={12} style={{ animation: 'spin 1s linear infinite' }} /> 部署中…</>
+          <><Loader size={12} style={{ animation: 'spin 1s linear infinite' }} /> {t('mcp.deploying')}</>
         ) : (
-          '一键部署'
+          t('mcp.deployBtn')
         )}
       </button>
     </div>
