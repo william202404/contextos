@@ -37,3 +37,4 @@ verify-settings.mjs
 # Stray build output in root
 index-*.css
 index-*.js
+AGENTS.md
