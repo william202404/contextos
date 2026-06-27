@@ -59,6 +59,7 @@ export default function ProjectChat() {
   const [lastIntent, setLastIntent] = useState(null)
   const [knowledgeSuggestion, setKnowledgeSuggestion] = useState(false)
   const [extractingKnowledge, setExtractingKnowledge] = useState(false)
+  const [showSkillPicker, setShowSkillPicker] = useState(false)
 
   const messagesEndRef = useRef(null)
   const abortRef = useRef(null)
@@ -647,24 +648,58 @@ graph TD
       <div style={{
         height: 38, display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
         padding: '0 16px', borderBottom: '1px solid var(--border)',
-        background: 'var(--bg-surface)',
+        background: 'var(--bg-surface)', position: 'relative',
       }}>
-        {/* 技能区 — 纯只读展示，系统自动加载 */}
+        {/* 技能区 — 只读展示 + 持久化项目可绑定默认技能 */}
         {hasAnySkill && (
           <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', flexShrink: 0, letterSpacing: '0.02em' }}>技能</span>
         )}
 
-        {/* 项目默认技能（固定，由项目设置决定） */}
-        {activeSkill && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: '2px 8px', borderRadius: 5, flexShrink: 0,
-            background: 'var(--accent-glow)', border: '1px solid var(--accent-border)',
-            fontSize: 10, fontWeight: 600, color: 'var(--accent)',
-          }} title="项目默认技能">
+        {/* 项目默认技能（可点击更换） */}
+        {activeSkill ? (
+          <div
+            onClick={() => !project?.isTemp && setShowSkillPicker(v => !v)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '2px 8px', borderRadius: 5, flexShrink: 0,
+              background: 'var(--accent-glow)', border: '1px solid var(--accent-border)',
+              fontSize: 10, fontWeight: 600, color: 'var(--accent)',
+              cursor: project?.isTemp ? 'default' : 'pointer',
+            }}
+            title="点击更换项目默认技能"
+          >
             <span>{activeSkill.icon}</span>
             <span>{activeSkill.name}</span>
+            {!project?.isTemp && <span style={{ opacity: 0.6, fontSize: 9 }}>▾</span>}
           </div>
+        ) : !project?.isTemp && installedSkills.length > 0 && (
+          <button
+            onClick={() => setShowSkillPicker(v => !v)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 3,
+              padding: '2px 8px', borderRadius: 5, flexShrink: 0,
+              background: 'none', border: '1px dashed var(--border)',
+              fontSize: 10, color: 'var(--text-muted)', cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+            title="绑定项目默认技能"
+          >
+            <span>✦</span>
+            <span>绑定技能</span>
+          </button>
+        )}
+
+        {/* 技能选择浮层 */}
+        {showSkillPicker && !project?.isTemp && (
+          <SkillPickerPopover
+            skills={installedSkills}
+            activeSkillId={activeSkillId}
+            onSelect={(sid) => { handleActivateSkill(sid); setShowSkillPicker(false) }}
+            onClear={() => { handleDeactivateSkill(); setShowSkillPicker(false) }}
+            onClose={() => setShowSkillPicker(false)}
+          />
         )}
 
         {/* 自动匹配技能（本条消息命中，只读） */}
@@ -1273,6 +1308,67 @@ const EMOJI_LIST = [
   '🎓','📚','🧩','⚙️','🔍','💬','🎪','🌱','🎵','🤖',
   '🦋','🌈','🏔','🌊','🎭','💎','🌿','🔮','🧬','🎲',
 ]
+
+function SkillPickerPopover({ skills, activeSkillId, onSelect, onClear, onClose }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) onClose()
+    }
+    setTimeout(() => document.addEventListener('mousedown', handleClick), 0)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [onClose])
+
+  return (
+    <div ref={ref} style={{
+      position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 300,
+      background: 'var(--bg-surface)', border: '1px solid var(--border)',
+      borderRadius: 10, padding: '6px', boxShadow: 'var(--shadow-lg)',
+      minWidth: 200, maxWidth: 280,
+    }}>
+      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', padding: '4px 8px 6px', letterSpacing: '0.05em' }}>
+        项目默认技能
+      </div>
+      {skills.map(skill => {
+        const isActive = skill.id === activeSkillId
+        return (
+          <button key={skill.id} onClick={() => onSelect(skill.id)} style={{
+            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+            padding: '6px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', textAlign: 'left',
+            background: isActive ? 'var(--accent-glow)' : 'none',
+            color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+            fontSize: 12, fontWeight: isActive ? 600 : 400,
+            transition: 'background 0.1s',
+          }}
+            onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)' }}
+            onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'none' }}
+          >
+            <span style={{ fontSize: 14, flexShrink: 0 }}>{skill.icon}</span>
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{skill.name}</span>
+            {isActive && <span style={{ fontSize: 10, color: 'var(--accent)' }}>✓</span>}
+          </button>
+        )
+      })}
+      {activeSkillId && (
+        <>
+          <div style={{ height: 1, background: 'var(--border)', margin: '4px 8px' }} />
+          <button onClick={onClear} style={{
+            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+            padding: '5px 8px', borderRadius: 6, border: 'none', cursor: 'pointer',
+            background: 'none', color: 'var(--text-muted)', fontSize: 11, textAlign: 'left',
+            transition: 'background 0.1s',
+          }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+          >
+            <span>✕</span>
+            <span>取消绑定</span>
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
 
 function EmojiPicker({ onSelect, onClose }) {
   const ref = useRef(null)
