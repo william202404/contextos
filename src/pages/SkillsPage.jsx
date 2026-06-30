@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BUILTIN_SKILLS, SKILL_CATEGORIES, getInstalledSkills, installSkillFull, uninstallSkillFull } from '../lib/skills'
 import { searchSkillHub, normalizeSkillHubSkill } from '../lib/skillhub'
+import { getMcpDependencyStatus } from '../lib/mcp'
 import { getUserProfile } from '../components/SettingsModal'
 import SettingsModal from '../components/SettingsModal'
 import AppRail from '../components/AppRail'
@@ -353,6 +354,35 @@ export default function SkillsPage() {
 }
 
 
+// Skill ↔ MCP dependency badges — shows whether required tools are connected.
+// Clicking a badge jumps to the MCP page to connect the tool.
+function McpDepBadges({ deps }) {
+  const navigate = useNavigate()
+  const status = getMcpDependencyStatus(deps)
+  if (!status.length) return null
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+      {status.map(d => (
+        <button
+          key={d.id}
+          onClick={e => { e.stopPropagation(); navigate('/mcp') }}
+          title={d.connected ? '依赖工具已连接' : '点击前往 MCP 连接此工具'}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600,
+            padding: '2px 7px', borderRadius: 10, cursor: 'pointer', border: '1px solid',
+            color: d.connected ? 'var(--green)' : 'var(--amber)',
+            background: d.connected ? 'var(--green-bg)' : 'rgba(251,191,36,0.08)',
+            borderColor: d.connected ? 'rgba(52,211,153,0.25)' : 'rgba(251,191,36,0.25)',
+          }}
+        >
+          🔌 {d.name} {d.connected ? '✓' : '· 未连接'}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function SectionHeader({ title }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
@@ -388,6 +418,7 @@ function InstalledList({ skills, onUninstall, onUse }) {
             <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 1 }}>{skill.name}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{skill.desc}</div>
           </div>
+          {skill.mcpDeps?.length > 0 && <div style={{ flexShrink: 0 }}><McpDepBadges deps={skill.mcpDeps} /></div>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <button onClick={onUse} style={{
               padding: '6px 12px', borderRadius: 6,
@@ -449,6 +480,7 @@ function StoreCard({ skill, installed, installing, onToggle, featured = false })
         <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{skill.name}</div>
         <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{skill.desc}</div>
       </div>
+      <McpDepBadges deps={skill.mcpDeps} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>
           {skill.category}{skill.source === 'skillhub' ? ' · SkillHub' : ''}

@@ -181,6 +181,19 @@ export function getServerToolDefs(serverId) {
   }))
 }
 
+// --- Skill ↔ MCP dependency linking ---
+
+// For a skill's mcpDeps (array of server ids), report connection status.
+// Returns [{ id, name, connected }]; empty array when no deps.
+export function getMcpDependencyStatus(deps = []) {
+  if (!deps || !deps.length) return []
+  const connectedIds = new Set(getConnectedServers().map(s => s.id))
+  return deps.map(id => {
+    const server = DEMO_SERVERS.find(s => s.id === id)
+    return { id, name: server?.name || id, connected: connectedIds.has(id) }
+  })
+}
+
 // --- Tool schema helpers ---
 
 export function getAllServerTools(connectedServers) {
