@@ -125,9 +125,6 @@ export default function MCPPage() {
     }
   }
 
-  const connectedCount = connectedIds.size
-  const sep = i18n.language === 'zh' ? '、' : ', '
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>
       {/* Titlebar */}
@@ -426,8 +423,8 @@ function MCPCard({ server, connected, onConnect, onDisconnect, onShowGuide }) {
             {needsKey && !hasKey && !connected && (
               <span style={{
                 fontSize: 10, padding: '1px 7px', borderRadius: 10, fontWeight: 600,
-                background: 'rgba(139,92,246,0.08)', color: 'var(--accent)',
-                border: '1px solid rgba(139,92,246,0.2)',
+                background: 'var(--accent-glow)', color: 'var(--accent)',
+                border: '1px solid rgba(61,142,245,0.2)',
               }}>{server.keyOptional ? t('mcp.optionalToken') : t('mcp.needsApiKey')}</span>
             )}
             {connected && (

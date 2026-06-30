@@ -115,8 +115,6 @@ async function extractExcel(file) {
 async function extractPPT(file) {
   // pptx is a ZIP; extract text from slide XML files
   try {
-    const { read: xlsxRead } = await import('xlsx')
-    // Use JSZip-compatible approach via xlsx's CFB
     const buffer = await readAsArrayBuffer(file)
     if (!buffer) return null
 

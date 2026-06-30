@@ -5,7 +5,6 @@ import {
   saveProject, saveConversation, archiveProject, deleteProject, deleteConversation,
   getWeeklyAICount, getTodayActivity, getPrevWeekAICount, getNewProjectsCount, toggleProjectPin,
 } from '../store/db'
-import { getInstalledSkills } from '../lib/skills'
 import { DEFAULT_MODEL } from '../lib/llm'
 import SettingsModal, { getUserProfile } from '../components/SettingsModal'
 import DecomposeModal from '../components/DecomposeModal'
@@ -80,8 +79,6 @@ export default function Overview() {
   }
 
   function handleSettingsClose() { setShowSettings(false); setProfile(getUserProfile()) }
-
-  function handleStartChat() { navigate(`/project/${crypto.randomUUID()}`) }
 
   async function handleDailyGuide() {
     const id = crypto.randomUUID()
@@ -385,7 +382,7 @@ export default function Overview() {
 }
 
 
-function ProjectCard({ project: p, index, navigate, onArchive, onDelete, onPin }) {
+function ProjectCard({ project: p, index, navigate, onPin }) {
   const [hovered, setHovered] = useState(false)
   const knowledgeLen = Array.isArray(p.knowledge) ? p.knowledge.length : 0
   const depthPct = Math.min(100, Math.round((knowledgeLen / 20) * 100))
@@ -468,7 +465,7 @@ function ProjectCard({ project: p, index, navigate, onArchive, onDelete, onPin }
   )
 }
 
-function ConvRow({ conv, onNavigate, onPromote, onDelete }) {
+function ConvRow({ conv, onNavigate, onPromote }) {
   const [hovered, setHovered] = useState(false)
   const colors = ['var(--amber)', 'var(--text-muted)', 'var(--accent-raw)', 'var(--green)']
   const dotColor = colors[Math.abs(conv.id?.charCodeAt(0) || 0) % colors.length]
@@ -513,13 +510,6 @@ function StatCard({ label, value, color, delta, animate, delay }) {
     }, 18)
     return () => clearInterval(id)
   }, [value, animate])
-
-  const labelMap = {
-    '活跃项目': '活跃项目',
-    '知识条目': '知识条目',
-    '本周对话': '本周对话',
-    '未归项': '未归项对话',
-  }
 
   return (
     <div style={{

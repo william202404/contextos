@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -312,8 +312,6 @@ gantt
       ? `${projectContext}\n\n${basePrompt}${artifactInstruction}${fileContext}`
       : `${basePrompt}${artifactInstruction}${fileContext}`
 
-    let fullResponse = ''
-
     // Inject artifact content into history so AI can read context
     const messagesForApi = updatedMessages.map((m, idx) => {
       const docs = (m.artifacts || []).filter(a => a.type === 'document' && a.content)
@@ -361,7 +359,6 @@ gantt
         return executeTool(toolDef._serverId, toolName, toolInput)
       },
       onChunk: (_, full) => {
-        fullResponse = full
         setToolStatus('')
         setStreamingText(full)
       },
@@ -842,17 +839,6 @@ gantt
   }
 
   const isElectron = !!window.electronAPI
-  const allModelsFull = { ...MODELS, ...ollamaModels, ...compatibleModels }
-  const modelLabel = allModelsFull[model]?.label || model
-
-  const iconBtnStyle = {
-    width: 34, height: 34, borderRadius: 8,
-    border: 'none', background: 'transparent',
-    color: 'var(--text-muted)', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 13, transition: 'all 0.15s', flexShrink: 0,
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)', position: 'relative', zIndex: 1 }}>
 

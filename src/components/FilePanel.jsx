@@ -13,7 +13,7 @@ const FILE_ICONS = {
   pdf:       { Icon: FileArchive, color: 'var(--red)',    bg: 'var(--red-bg)' },
 }
 
-export default function FilePanel({ project, files, messages = [], tokenPercent = 0, onGenerateSummary, onSummaryEdit, onKnowledgeEdit, onConsolidateKnowledge, onClose, memory, reflectionRunning, onMemoryEdit, onReflect }) {
+export default function FilePanel({ project, files, messages = [], tokenPercent = 0, onGenerateSummary, onSummaryEdit, onKnowledgeEdit, onConsolidateKnowledge, memory, reflectionRunning, onMemoryEdit, onReflect }) {
   const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState('files')
   const [summarySubTab, setSummarySubTab] = useState('status') // 'status' | 'knowledge'

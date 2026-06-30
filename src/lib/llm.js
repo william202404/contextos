@@ -379,7 +379,6 @@ export function stripStreamingArtifacts(text) {
 
 export async function generateProjectMeta(messages, model = DEFAULT_MODEL) {
   return new Promise((resolve, reject) => {
-    let result = ''
     streamMessage({
       model,
       systemPrompt: `根据以下对话，用JSON格式输出项目名称和当前状态，不要输出任何其他内容：
@@ -390,7 +389,6 @@ export async function generateProjectMeta(messages, model = DEFAULT_MODEL) {
           content: messages.map(m => `${m.role === 'user' ? '用户' : 'AI'}: ${m.content}`).join('\n\n'),
         },
       ],
-      onChunk: (_, full) => { result = full },
       onDone: (full) => {
         try {
           const cleaned = full.replace(/```json\n?|\n?```/g, '').trim()

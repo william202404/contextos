@@ -25,7 +25,7 @@ async function getMarkmapModules() {
   return cachedModules
 }
 
-const COLORS = ['#8875F5', '#06b6d4', '#34d399', '#f59e0b', '#f472b6', '#fb923c']
+const COLORS = ['#3D8EF5', '#06b6d4', '#34d399', '#f59e0b', '#f472b6', '#fb923c']
 
 export default function MarkmapViewer({ markdown, minHeight = 320 }) {
   const svgRef = useRef(null)
