@@ -410,6 +410,10 @@
     "risk_write": "写入",
     "risk_high": "高风险",
     "enableTool": "启用工具",
-    "disableTool": "禁用工具"
+    "disableTool": "禁用工具",
+    "statConnected": "已连接",
+    "statAvailableTools": "可用工具",
+    "statPending": "待配置",
+    "capabilities": "可访问能力"
   }
 }

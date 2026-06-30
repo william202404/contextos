@@ -2,8 +2,8 @@ const CONNECTED_KEY = 'ctx_mcp_connected'
 
 // 仅包含真实可用的 HTTP 工具（stdio 工具、纯演示工具已移除）
 export const DEMO_SERVERS = [
-  { id: 'brave-search', name: 'Brave Search', icon: '🔍', desc: '接入 Brave 搜索引擎，让 AI 实时获取网络信息', type: 'http', tools: 2, stars: 1840, category: '搜索', keyStore: 'ctx_brave_key', keyLabel: 'Brave Search API Key' },
-  { id: 'github',       name: 'GitHub',        icon: '🐙', desc: '访问 GitHub 公共 API，搜索代码仓库、读取文件内容', type: 'http', tools: 2, stars: 3200, category: '开发', keyStore: 'ctx_github_token', keyLabel: 'GitHub Token（可选）', keyOptional: true },
+  { id: 'brave-search', name: 'Brave Search', icon: '🔍', desc: '接入 Brave 搜索引擎，让 AI 实时获取网络信息', type: 'http', tools: 2, stars: 1840, category: '搜索', keyStore: 'ctx_brave_key', keyLabel: 'Brave Search API Key', permissions: ['实时网页搜索', '读取搜索结果摘要'] },
+  { id: 'github',       name: 'GitHub',        icon: '🐙', desc: '访问 GitHub 公共 API，搜索代码仓库、读取文件内容', type: 'http', tools: 2, stars: 3200, category: '开发', keyStore: 'ctx_github_token', keyLabel: 'GitHub Token（可选）', keyOptional: true, permissions: ['搜索公共仓库', '读取仓库文件内容'] },
 ]
 
 // Tool definitions per server — _execute is stripped before sending to Claude API

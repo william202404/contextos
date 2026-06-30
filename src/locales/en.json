@@ -410,6 +410,10 @@
     "risk_write": "Write",
     "risk_high": "High Risk",
     "enableTool": "Enable tool",
-    "disableTool": "Disable tool"
+    "disableTool": "Disable tool",
+    "statConnected": "Connected",
+    "statAvailableTools": "Available Tools",
+    "statPending": "Needs Setup",
+    "capabilities": "Capabilities"
   }
 }

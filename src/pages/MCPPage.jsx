@@ -49,6 +49,7 @@ export default function MCPPage() {
   const [deploying, setDeploying] = useState(null)
   const [showSettings, setShowSettings] = useState(false)
   const [keyModal, setKeyModal] = useState(null) // null | { server, value }
+  const [toolRev, setToolRev] = useState(0) // bump to recompute tool-derived stats after a toggle
   const profile = getUserProfile()
   const displayName = profile.name || 'ContextOS'
 
@@ -132,6 +133,19 @@ export default function MCPPage() {
     }
   }
 
+  // --- Connection summary metrics (recomputed when connections or tool toggles change) ---
+  void toolRev // dependency marker: re-read tool states after a toggle
+  const connectedCuratedServers = DEMO_SERVERS.filter(s => connectedIds.has(s.id))
+  const availableToolCount = connectedCuratedServers.reduce(
+    (sum, s) => sum + getServerToolDefs(s.id).filter(td => isToolEnabled(s.id, td.name)).length, 0,
+  )
+  const pendingCount = connectedCuratedServers.filter(s => s.keyStore && !localStorage.getItem(s.keyStore)).length
+  const summaryStats = [
+    { label: t('mcp.statConnected'), value: connectedIds.size },
+    { label: t('mcp.statAvailableTools'), value: availableToolCount },
+    { label: t('mcp.statPending'), value: pendingCount },
+  ]
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>
       {/* Titlebar */}
@@ -211,6 +225,26 @@ export default function MCPPage() {
           </div>
         </div>
 
+        {/* Connection summary (only once something is connected) */}
+        {connectedIds.size > 0 && (
+          <div style={{
+            display: 'flex', gap: 12, marginBottom: 28,
+          }}>
+            {summaryStats.map(stat => (
+              <div key={stat.label} style={{
+                flex: 1, background: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: 12, padding: '14px 18px',
+                display: 'flex', flexDirection: 'column', gap: 2,
+              }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+                  {stat.value}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{stat.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* MCP Server grid */}
         <section style={{ marginBottom: 48 }}>
           <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -230,6 +264,7 @@ export default function MCPPage() {
                 onConnect={() => handleConnect(server)}
                 onDisconnect={() => handleDisconnect(server.id)}
                 onShowGuide={setShowGuide}
+                onToolChange={() => setToolRev(v => v + 1)}
               />
             ))}
           </div>
@@ -396,7 +431,7 @@ export default function MCPPage() {
   )
 }
 
-function MCPCard({ server, connected, onConnect, onDisconnect, onShowGuide }) {
+function MCPCard({ server, connected, onConnect, onDisconnect, onShowGuide, onToolChange }) {
   const { t } = useTranslation()
   const isHTTP = server.type === 'http'
   const needsKey = !!server.keyStore
@@ -416,6 +451,7 @@ function MCPCard({ server, connected, onConnect, onDisconnect, onShowGuide }) {
       setToolEnabled(server.id, name, !willDisable)
       return { ...prev, [name]: willDisable }
     })
+    onToolChange?.()
   }
 
   return (
@@ -455,6 +491,17 @@ function MCPCard({ server, connected, onConnect, onDisconnect, onShowGuide }) {
             )}
           </div>
           <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>{server.desc}</p>
+          {server.permissions?.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+              {server.permissions.map(p => (
+                <span key={p} style={{
+                  fontSize: 10, padding: '1px 7px', borderRadius: 8,
+                  background: 'var(--bg-hover)', border: '1px solid var(--border)',
+                  color: 'var(--text-secondary)',
+                }}>{p}</span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
