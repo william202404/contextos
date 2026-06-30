@@ -446,8 +446,18 @@ function InstalledList({ skills, onUninstall, onUse }) {
   )
 }
 
+// Compact count formatter for downloads (e.g. 1240 → 1.2k)
+function formatCount(n) {
+  if (!n || n < 1000) return String(n || 0)
+  return (n / 1000).toFixed(n < 10000 ? 1 : 0).replace(/\.0$/, '') + 'k'
+}
+
 function StoreCard({ skill, installed, installing, onToggle, featured = false }) {
   const badge = BADGE_MAP[skill.id]
+  // Trust metadata — builtin skills are first-party; SkillHub skills carry their own.
+  const author = skill.author || 'ContextOS 官方'
+  const version = skill.version || '1.0'
+  const isSkillHub = skill.source === 'skillhub'
   return (
     <div style={{
       background: featured ? 'linear-gradient(135deg, rgba(61,142,245,0.04) 0%, var(--bg-card) 60%)' : 'var(--bg-card)',
@@ -481,9 +491,15 @@ function StoreCard({ skill, installed, installing, onToggle, featured = false })
         <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{skill.desc}</div>
       </div>
       <McpDepBadges deps={skill.mcpDeps} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 110 }} title={author}>{author}</span>
+        <span title={skill.changelog || undefined} style={{ cursor: skill.changelog ? 'help' : 'default' }}>· v{version}</span>
+        {isSkillHub && skill.downloads > 0 && <span>· ↓{formatCount(skill.downloads)}</span>}
+        {isSkillHub && skill.stars > 0 && <span>· ★{formatCount(skill.stars)}</span>}
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>
-          {skill.category}{skill.source === 'skillhub' ? ' · SkillHub' : ''}
+          {skill.category}{isSkillHub ? ' · SkillHub' : ''}
         </span>
         {installed ? (
           <button disabled style={{ padding: '5px 12px', borderRadius: 6, fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'default' }}>已安装</button>

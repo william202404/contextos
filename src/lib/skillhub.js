@@ -83,6 +83,9 @@ export function normalizeSkillHubSkill(s) {
     source: 'skillhub',
     stars: s.stars || 0,
     downloads: s.downloads || 0,
+    author: s.author || s.owner || s.publisher || '社区作者',
+    version: s.version || s.latestVersion || '',
+    changelog: s.changelog || s.releaseNotes || '',
     requiresApiKey: s.labels?.requires_api_key === 'true',
     homepage: s.homepage || `https://skillhub.cn/${s.slug}`,
   }
