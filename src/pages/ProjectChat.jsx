@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { getProject, saveProject, updateProject, updateConversation, getProjectMessages, getConvMessages, getProjectConversations, saveConversation, saveMessage, deleteMessage, deleteProjectMessages, getProjectFiles, saveFile, getConversation } from '../store/db'
+import { getProject, saveProject, updateProject, updateConversation, getProjectMessages, getConvMessages, getProjectConversations, saveConversation, saveMessage, deleteMessage, deleteProjectMessages, getProjectFiles, saveFile, getConversation, deleteConversation } from '../store/db'
 import { streamMessage, generateProjectMeta, generateKnowledgeUpdate, consolidateKnowledge, MODELS, DEFAULT_MODEL, parseArtifacts, stripArtifacts, stripStreamingArtifacts, getOllamaModels, getCompatibleModels, getApiKeys, getCompatibleConfig } from '../lib/llm'
 import { DEMO_SERVERS, getConnectedServers, getAllServerTools, executeTool } from '../lib/mcp'
 import { getMemory, saveMemory, triggerReflection, calcReflectionScore } from '../lib/memory'
@@ -16,14 +15,17 @@ import ChatMessage from '../components/ChatMessage'
 import FilePanel from '../components/FilePanel'
 import InputBar from '../components/InputBar'
 import CreateProjectModal from '../components/CreateProjectModal'
-import SettingsModal from '../components/SettingsModal'
+import SettingsModal, { getUserProfile } from '../components/SettingsModal'
 import SearchModal from '../components/SearchModal'
+import AIBrief from '../components/AIBrief'
+import { useTranslation } from 'react-i18next'
 
 export default function ProjectChat() {
   const { t } = useTranslation()
   const { id } = useParams()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { name: displayName = 'U' } = getUserProfile()
 
   const [project, setProject] = useState(null)
   const [messages, setMessages] = useState([])
@@ -116,13 +118,12 @@ export default function ProjectChat() {
 
       // 本次会话新增 ≥ 4 条 AI 回复，且项目已持久化，自动更新 status
       if (newAiCount >= 4 && proj && !proj.isTemp) {
+        const existingKnowledge = Array.isArray(proj.knowledge) ? proj.knowledge : []
         Promise.all([
           generateProjectMeta(msgs, modelRef.current),
-          generateKnowledgeUpdate(msgs, proj.knowledge || '', modelRef.current),
-        ]).then(([meta, newKnowledge]) => {
-          const knowledge = newKnowledge
-            ? (proj.knowledge ? proj.knowledge + '\n' + newKnowledge : newKnowledge)
-            : proj.knowledge || ''
+          generateKnowledgeUpdate(msgs, existingKnowledge, modelRef.current),
+        ]).then(([meta, newItems]) => {
+          const knowledge = newItems ? [...existingKnowledge, ...newItems] : existingKnowledge
           const status = meta.status || meta.summary || ''
           if (status) updateProject(id, { status, knowledge, updatedAt: Date.now() }).catch(() => {})
         }).catch(() => {})
@@ -141,6 +142,7 @@ export default function ProjectChat() {
     setError('')
     setTriggerShown(false)
     setKnowledgeSuggestion(false)
+    setDisplayCount(50)
     const [proj, msgs, fls, threads] = await Promise.all([
       getProject(id),
       threadId ? getConvMessages(threadId) : getProjectMessages(id),
@@ -156,7 +158,7 @@ export default function ProjectChat() {
       // 不立即写 DB，等用户发第一条消息才真正保存
       const now = Date.now()
       const newProj = {
-        id, name: '新对话', status: '', knowledge: '',
+        id, name: '新对话', status: '', knowledge: [],
         model: DEFAULT_MODEL, icon: '💬',
         createdAt: now, updatedAt: now,
         isTemp: true,
@@ -214,7 +216,7 @@ export default function ProjectChat() {
     // Auto-title thread from first user message
     if (threadId && messages.length === 0) {
       const title = text.trim().slice(0, 28) + (text.trim().length > 28 ? '…' : '')
-      updateConversation(threadId, { title, updatedAt: Date.now() })
+      await updateConversation(threadId, { title, updatedAt: Date.now() })
       setProjectThreads(prev => prev.map(t => t.id === threadId ? { ...t, title } : t))
     }
 
@@ -239,7 +241,7 @@ export default function ProjectChat() {
     setStreamingText('')
     toolCallsRef.current = []
 
-    const artifactInstruction = `\n\n当用户需要文档、报告、流程图或脑图时，在正文回复之后，用以下格式输出产出物（不要放在正文中间）：
+    const artifactInstruction = `\n\n当用户需要文档、报告、流程图、脑图或甘特图时，在正文回复之后，用以下格式输出产出物（不要放在正文中间）：
 
 <artifact type="document" title="文档标题">
 # 一级标题
@@ -270,9 +272,22 @@ graph TD
 ### 子项 D
 </artifact>
 
+<artifact type="gantt" title="项目甘特图">
+gantt
+  title 项目计划
+  dateFormat YYYY-MM-DD
+  section 阶段一
+    需求分析 :a1, 2024-01-01, 7d
+    方案设计 :a2, after a1, 5d
+  section 阶段二
+    开发实现 :b1, after a2, 14d
+    测试验证 :b2, after b1, 7d
+</artifact>
+
 规则：
 - flowchart 使用 Mermaid 语法（graph TD / graph LR）
 - mindmap 使用 Markdown 大纲格式（# 主题 / ## 分支 / ### 子项），**不要**使用 Mermaid mindmap 语法
+- gantt 使用 Mermaid gantt 语法，dateFormat YYYY-MM-DD，用 after 语法表达依赖关系
 - document 使用 Markdown 格式，内容要完整详细
 - 只在用户明确需要时才生成产出物`
 
@@ -299,13 +314,18 @@ graph TD
 
     let fullResponse = ''
 
-    // Inject document artifact content so AI can read notes
+    // Inject artifact content into history so AI can read context
     const messagesForApi = updatedMessages.map((m, idx) => {
       const docs = (m.artifacts || []).filter(a => a.type === 'document' && a.content)
-      const docText = docs.length > 0
-        ? docs.map(a => `[文档「${a.title}」]\n${a.content}`).join('\n\n')
-        : ''
-      const baseText = (m.content || '') + (docText ? '\n\n' + docText : '')
+      const charts = (m.artifacts || []).filter(a => a.type !== 'document' && (a.code || a.content))
+      const docText = docs.map(a => `[文档「${a.title}」]\n${a.content}`).join('\n\n')
+      const typeLabel = { flowchart: '流程图', mindmap: '脑图', gantt: '甘特图' }
+      const chartNote = charts.map(a => `[已生成${typeLabel[a.type] || a.type}「${a.title}」]`).join('\n')
+      const extra = [docText, chartNote].filter(Boolean).join('\n\n')
+      const baseText = ((m.content || '') + (extra ? '\n\n' + extra : '')).trim()
+      // Assistant messages with empty content (artifact-only responses) must have fallback
+      // to avoid API rejecting the request with a validation error on subsequent turns
+      const finalContent = baseText || (m.role === 'assistant' ? '[已完成]' : m.content || ' ')
 
       // Inject images into the last user message only (Vision API)
       const isLastUserMsg = m.role === 'user' && idx === updatedMessages.length - 1
@@ -315,12 +335,12 @@ graph TD
             type: 'image',
             source: { type: 'base64', media_type: f.imageData.mediaType, data: f.imageData.data },
           })),
-          { type: 'text', text: baseText || ' ' },
+          { type: 'text', text: finalContent },
         ]
         return { ...m, content }
       }
 
-      return baseText !== m.content ? { ...m, content: baseText } : m
+      return finalContent !== m.content ? { ...m, content: finalContent } : m
     })
 
     const controller = new AbortController()
@@ -397,7 +417,8 @@ graph TD
           generateProjectMeta(allMsgs, model)
             .then(meta => {
               if (meta.name && meta.name !== '新项目') {
-                const titled = { ...project, name: meta.name, status: meta.status || meta.summary || '', isTemp: false, updatedAt: Date.now() }
+                const cur = projectRef.current
+                const titled = { ...cur, name: meta.name, status: meta.status || meta.summary || cur.status || '', isTemp: false, updatedAt: Date.now() }
                 saveProject(titled)
                 setProject(titled)
               }
@@ -412,7 +433,7 @@ graph TD
 
         // 语义触发（临时对话）：3 轮后检测 AI 回复是否包含高价值内容 → 提示建项目
         if (!triggerShown && project?.isTemp && allMsgs.length >= 6) {
-          checkSemanticTrigger(cleanContent, model).then(result => {
+          checkSemanticTrigger(cleanContent).then(result => {
             if (result.isHighValue) {
               setTriggerReason('semantic')
               setTriggerShown(true)
@@ -422,7 +443,7 @@ graph TD
 
         // 语义触发（持久化项目）：每 3 轮检测一次，发现高价值内容 → 提示提取到知识库
         if (!project?.isTemp && aiCount > 0 && aiCount % 3 === 0 && !knowledgeSuggestion) {
-          checkSemanticTrigger(cleanContent, model).then(result => {
+          checkSemanticTrigger(cleanContent).then(result => {
             if (result.isHighValue) setKnowledgeSuggestion(true)
           }).catch(() => {})
         }
@@ -447,9 +468,10 @@ graph TD
   }
 
   async function handleConsolidateKnowledge() {
-    if (!project?.knowledge) return
-    const consolidated = await consolidateKnowledge(project.knowledge, model)
-    if (consolidated && consolidated !== project.knowledge) {
+    const existing = Array.isArray(project?.knowledge) ? project.knowledge : []
+    if (existing.length === 0) return
+    const consolidated = await consolidateKnowledge(existing, model)
+    if (consolidated && consolidated !== existing) {
       const updated = { ...project, knowledge: consolidated, updatedAt: Date.now() }
       await saveProject(updated)
       setProject(updated)
@@ -460,10 +482,10 @@ graph TD
     if (extractingKnowledge || !project) return
     setExtractingKnowledge(true)
     try {
-      const newKnowledge = await generateKnowledgeUpdate(messages, project.knowledge || '', model)
-      if (newKnowledge) {
-        const combined = project.knowledge ? project.knowledge + '\n' + newKnowledge : newKnowledge
-        const updated = { ...project, knowledge: combined, updatedAt: Date.now() }
+      const existing = Array.isArray(project.knowledge) ? project.knowledge : []
+      const newItems = await generateKnowledgeUpdate(messages, existing, model)
+      if (newItems) {
+        const updated = { ...project, knowledge: [...existing, ...newItems], updatedAt: Date.now() }
         await saveProject(updated)
         setProject(updated)
       }
@@ -533,13 +555,12 @@ graph TD
 
   async function handleGenerateSummary() {
     if (messages.length < 2) return
-    const [meta, newKnowledge] = await Promise.all([
+    const existing = Array.isArray(project?.knowledge) ? project.knowledge : []
+    const [meta, newItems] = await Promise.all([
       generateProjectMeta(messages, model),
-      generateKnowledgeUpdate(messages, project?.knowledge || '', model),
+      generateKnowledgeUpdate(messages, existing, model),
     ])
-    const knowledge = newKnowledge
-      ? (project?.knowledge ? project.knowledge + '\n' + newKnowledge : newKnowledge)
-      : (project?.knowledge || '')
+    const knowledge = newItems ? [...existing, ...newItems] : existing
     const updated = { ...project, status: meta.status || meta.summary || '', knowledge, updatedAt: Date.now() }
     await saveProject(updated)
     setProject(updated)
@@ -574,6 +595,7 @@ graph TD
     const noteMsg = {
       id: crypto.randomUUID(),
       projectId: id,
+      ...(threadId ? { convId: threadId } : {}),
       role: 'assistant',
       content: project?.isTemp ? '已创建空白笔记，点击下方卡片即可编辑。' : '已创建空白笔记，可在右侧产出物面板中编辑。',
       artifacts: [{
@@ -668,12 +690,18 @@ graph TD
     navigate(`/project/${id}?thread=${newThread.id}`)
   }
 
+  async function handleDeleteThread(tId) {
+    await deleteConversation(tId)
+    setProjectThreads(prev => prev.filter(t => t.id !== tId))
+    if (threadId === tId) navigate(`/project/${id}`)
+  }
+
   // 从消息字符数估算 token 用量（1 token ≈ 2.5 中文字符，基准 100K token 窗口）
   const estimatedChars = messages.reduce((sum, m) => sum + (m.content?.length || 0), 0)
   const TOKEN_WINDOW = 200000
   const tokenPercent = Math.min(99, Math.round(estimatedChars / (TOKEN_WINDOW * 2.5) * 100))
 
-  function SkillBar() {
+  function renderSkillBar() {
     const allModels = { ...MODELS, ...ollamaModels, ...compatibleModels }
     const keys = getApiKeys()
     const compatCfg = getCompatibleConfig()
@@ -763,6 +791,22 @@ graph TD
 
         <div style={{ flex: 1 }} />
 
+        {/* Context injection label — shows what context was sent last time */}
+        {lastIntent && !project?.isTemp && (() => {
+          const label = describeInjection(lastIntent, project)
+          if (!label) return null
+          return (
+            <span style={{
+              fontSize: 9, color: 'var(--text-muted)',
+              padding: '2px 7px', borderRadius: 4,
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
+              fontFamily: 'var(--font-mono)', letterSpacing: '0.02em', flexShrink: 0,
+            }} title="上次发送时注入的项目上下文">
+              ⊙ {label}
+            </span>
+          )
+        })()}
+
         {/* Model selector with API key indicator */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {!modelReady && (
@@ -797,93 +841,58 @@ graph TD
     )
   }
 
+  const isElectron = !!window.electronAPI
+  const allModelsFull = { ...MODELS, ...ollamaModels, ...compatibleModels }
+  const modelLabel = allModelsFull[model]?.label || model
+
+  const iconBtnStyle = {
+    width: 34, height: 34, borderRadius: 8,
+    border: 'none', background: 'transparent',
+    color: 'var(--text-muted)', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 13, transition: 'all 0.15s', flexShrink: 0,
+  }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'row', height: '100vh', overflow: 'hidden' }}>
-      {/* Left sidebar — only for persisted projects */}
-      {project && !project.isTemp && (
-        <aside style={{
-          width: 190, minWidth: 190, flexShrink: 0,
-          background: 'var(--bg-surface)', borderRight: '1px solid var(--border)',
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          paddingTop: window.electronAPI ? 44 : 0,
-        }}>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 8px 4px' }}>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '0 8px', marginBottom: 6 }}>
-              {t('chat.threadList')}
-            </div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)', position: 'relative', zIndex: 1 }}>
 
-            {/* Default thread (legacy / main messages, no ?thread param) */}
-            <SidebarThread
-              label={project.name}
-              isActive={!threadId}
-              onClick={() => navigate(`/project/${id}`)}
-            />
-
-            {/* Named threads */}
-            {projectThreads.map(t => (
-              <SidebarThread
-                key={t.id}
-                label={t.title || '新对话'}
-                preview={t.preview}
-                isActive={threadId === t.id}
-                onClick={() => navigate(`/project/${id}?thread=${t.id}`)}
-              />
-            ))}
-
-            <button
-              onClick={handleNewThread}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, width: '100%', marginTop: 4, padding: '5px 8px', borderRadius: 5, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text-muted)', transition: 'all 0.15s', textAlign: 'left' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}
-            >
-              <span style={{ fontSize: 14, lineHeight: 1, marginTop: -1 }}>+</span>
-              <span>{t('chat.newThread')}</span>
-            </button>
-
-            <div style={{ height: 1, background: 'var(--border)', margin: '10px 8px 6px' }} />
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '0 8px', marginBottom: 4 }}>
-              {t('chat.navigation')}
-            </div>
-            {[
-              { icon: '⊞', label: t('nav.overview'), path: '/' },
-              { icon: '✦', label: t('nav.skills'), path: '/skills' },
-            ].map(item => (
-              <div key={item.label} onClick={() => navigate(item.path)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', transition: 'background 0.1s, color 0.1s' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)' }}
-              >
-                <span style={{ fontSize: 12, width: 16, textAlign: 'center' }}>{item.icon}</span>
-                {item.label}
-              </div>
-            ))}
-          </div>
-        </aside>
-      )}
-      {/* Right column */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-      {/* Top bar */}
-      <header className="glass" style={{
-        height: 52, background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)',
-        display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0,
-        padding: window.electronAPI ? '0 20px 0 88px' : '0 20px',
+      {/* ── Titlebar ── */}
+      <div style={{
+        height: 50, flexShrink: 0, position: 'relative',
+        background: 'var(--bg-titlebar)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderBottom: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', padding: '0 16px',
         WebkitAppRegion: 'drag',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-muted)', WebkitAppRegion: 'no-drag' }}>
+        {/* Traffic light safe zone (Electron hiddenInset shows native buttons) */}
+        <div style={{ width: isElectron ? 72 : 4, flexShrink: 0, WebkitAppRegion: 'no-drag' }} />
+
+        {/* Centered breadcrumb */}
+        <div style={{
+          position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+          display: 'flex', alignItems: 'center', gap: 7,
+          WebkitAppRegion: 'no-drag',
+          fontFamily: 'var(--font-ui)',
+        }}>
           <span
             onClick={() => navigate('/')}
-            style={{ cursor: 'pointer', transition: 'color 0.15s' }}
-            onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
+            style={{ fontSize: 11, color: 'var(--text-muted)', cursor: 'pointer', fontWeight: 500, transition: 'color 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--text-secondary)'}
             onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
           >
-            {project?.isTemp ? '对话' : '概览'}
+            {project?.isTemp ? '对话' : '项目'}
           </span>
-          <span style={{ color: 'var(--border)' }}>/</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 10, opacity: 0.6 }}>›</span>
+
+          {/* Icon picker */}
           {project && !project.isTemp && (
             <span style={{ position: 'relative' }}>
               <span
                 onClick={() => setShowIconPicker(v => !v)}
                 title="更换图标"
-                style={{ fontSize: 16, cursor: 'pointer', userSelect: 'none', lineHeight: 1, padding: '2px 3px', borderRadius: 5, transition: 'background 0.15s' }}
+                style={{ fontSize: 15, cursor: 'pointer', userSelect: 'none', lineHeight: 1, padding: '2px 3px', borderRadius: 4, transition: 'background 0.15s' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               >
@@ -902,6 +911,8 @@ graph TD
               )}
             </span>
           )}
+
+          {/* Project name (editable) */}
           {editingTitle ? (
             <input
               autoFocus
@@ -918,354 +929,432 @@ graph TD
               }}
               onKeyDown={e => {
                 if (e.key === 'Enter') e.currentTarget.blur()
-                if (e.key === 'Escape') { setEditingTitle(false) }
+                if (e.key === 'Escape') setEditingTitle(false)
               }}
               style={{
                 background: 'var(--bg-card)', border: '1px solid var(--accent)',
-                borderRadius: 6, padding: '2px 8px', fontSize: 13, fontWeight: 600,
-                color: 'var(--text-primary)', outline: 'none', width: 200,
+                borderRadius: 6, padding: '2px 8px', fontSize: 13, fontWeight: 700,
+                color: 'var(--text-primary)', outline: 'none', width: 180,
+                fontFamily: 'var(--font-ui)',
               }}
             />
           ) : (
             <span
-              style={{ color: 'var(--text-primary)', fontWeight: 600, cursor: project && !project.isTemp ? 'text' : 'default' }}
-              onClick={() => {
-                if (project && !project.isTemp) {
-                  setTitleDraft(project.name)
-                  setEditingTitle(true)
-                }
-              }}
+              style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em', cursor: project && !project.isTemp ? 'text' : 'default' }}
+              onClick={() => { if (project && !project.isTemp) { setTitleDraft(project.name); setEditingTitle(true) } }}
               title={project && !project.isTemp ? '点击重命名' : undefined}
             >
               {project?.name || '加载中…'}
             </span>
           )}
-          {project && !project.isTemp && (
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', flexShrink: 0 }} />
-          )}
-        </div>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, WebkitAppRegion: 'no-drag' }}>
-          <button onClick={() => setShowSettings(true)} style={topBtnStyle}>⚙ 设置</button>
-          {!project?.isTemp && (
-            <button
-              onClick={() => setPanelOpen(v => !v)}
-              style={{
-                width: 30, height: 30, borderRadius: 8, display: 'flex',
-                alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                border: '1px solid var(--border)', background: 'var(--bg-card)',
-                color: 'var(--text-secondary)', fontSize: 13, transition: 'all 0.15s',
-              }}
-              title={panelOpen ? '收起面板' : '展开面板'}
-            >
-              {panelOpen ? '⊟' : '⊞'}
-            </button>
-          )}
-        </div>
-      </header>
-
-      <SkillBar />
-
-      {/* Body */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        {/* Chat area */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-          {/* Messages */}
-          <div style={{
-            flex: 1, overflowY: 'auto', padding: '28px 32px',
-            display: 'flex', flexDirection: 'column', gap: 20,
-          }}>
-            {/* Context bar */}
-            {project && !project.isTemp && (
-              <div className="glass" style={{
-                background: 'var(--bg-card)', border: '1px solid var(--border)',
-                borderRadius: 10, padding: '8px 14px',
-                display: 'flex', alignItems: 'center', gap: 10,
-                fontSize: 12, color: 'var(--text-muted)',
-              }}>
-                <span style={{ fontSize: 14 }}>{project.icon || '📁'}</span>
-                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{project.name}</span>
-                {lastIntent && messages.length > 0 && (() => {
-                  const intentLabel = { continue: '继续话题', new_topic: '新话题', knowledge_query: '查询知识', decision: '决策分析' }[lastIntent] || lastIntent
-                  const ctxDetail = describeInjection(lastIntent, project)
-                  return (
-                    <>
-                      <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 5, background: 'var(--accent-glow)', color: 'var(--accent)', fontWeight: 500 }}>
-                        {intentLabel}
-                      </span>
-                      {ctxDetail && (
-                        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 5, background: 'var(--bg-hover)', color: 'var(--text-muted)' }}>
-                          {ctxDetail}
-                        </span>
-                      )}
-                    </>
-                  )
-                })()}
-                <span style={{ marginLeft: 'auto', fontSize: 11 }}>
-                  {messages.length} 条消息
-                </span>
-              </div>
-            )}
-
-            {/* Empty state */}
-            {messages.length === 0 && !streaming && (
-              <div style={{ textAlign: 'center', padding: '80px 0' }}>
-                <div style={{ fontSize: 40, marginBottom: 14 }}>✦</div>
-                <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6, color: 'var(--text-primary)' }}>
-                  开始对话
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                  输入内容，AI 会帮你思考和整理
-                </div>
-              </div>
-            )}
-
-            {/* Load more history */}
-            {messages.length > displayCount && (
-              <button
-                onClick={() => setDisplayCount(n => n + 50)}
-                style={{
-                  alignSelf: 'center', fontSize: 12, padding: '6px 16px',
-                  borderRadius: 8, cursor: 'pointer',
-                  background: 'var(--bg-hover)', color: 'var(--text-muted)',
-                  border: '1px solid var(--border)', transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.color = 'var(--text-secondary)'}
-                onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
-              >
-                加载更多历史（还有 {messages.length - displayCount} 条）
-              </button>
-            )}
-
-            {/* Messages */}
-            {messages.slice(-displayCount).map(msg => (
-              <ChatMessage
-                key={msg.id}
-                message={msg}
-                onSaveArtifact={handleSaveArtifact}
-                onArtifactUpdate={handleArtifactUpdate}
-                onEdit={!streaming ? handleEditMessage : undefined}
-                onRegenerate={!streaming ? handleRegenerate : undefined}
-                onRequestAiEdit={!streaming ? handleSend : undefined}
-              />
-            ))}
-
-            {/* Streaming message */}
-            {streaming && (
-              <div style={{ display: 'flex', gap: 12, alignSelf: 'flex-start', width: '100%' }}>
-                <div style={{
-                  width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                  background: 'var(--bg-hover)', border: '1px solid var(--border)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'var(--accent)',
-                }}>
-                  {/* Bot icon rendered inline */}
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 500 }}>
-                    ContextOS AI
-                  </div>
-                  <div className="glass" style={{
-                    padding: '12px 16px', borderRadius: '4px 16px 16px 16px',
-                    background: 'var(--bg-card)', border: '1px solid var(--border)',
-                    fontSize: 15, lineHeight: 1.85, color: 'var(--text-primary)',
-                  }}>
-                    {toolStatus ? (
-                      <span style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        fontSize: 13, color: 'var(--accent)',
-                      }}>
-                        <span style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>⚙</span>
-                        {toolStatus}
-                      </span>
-                    ) : streamingText ? (
-                      <div className="md">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {stripStreamingArtifacts(streamingText)}
-                        </ReactMarkdown>
-                      </div>
-                    ) : (
-                      <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-                        {[0, 0.2, 0.4].map((delay, i) => (
-                          <span key={i} style={{
-                            width: 6, height: 6, borderRadius: '50%',
-                            background: 'var(--accent)', display: 'inline-block',
-                            animation: `pulse-dot 1.2s ease-in-out ${delay}s infinite`,
-                          }} />
-                        ))}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Error */}
-            {error && (
-              <div className="glass" style={{
-                padding: '12px 16px', borderRadius: 12,
-                background: 'var(--red-bg)', border: '1px solid var(--red-border)',
-                fontSize: 13, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 8,
-              }}>
-                <span style={{ flex: 1 }}>⚠️ {error}</span>
-                {error.includes('API Key') && (
-                  <button
-                    onClick={() => setShowSettings(true)}
-                    style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 7, cursor: 'pointer', border: '1px solid var(--red-border)', background: 'var(--red-bg)', color: 'var(--red)' }}
-                  >
-                    打开设置
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Trigger prompt — only shown in temporary chat mode */}
-            {triggerShown && !showCreateModal && project?.isTemp && (
+          {/* Status badge */}
+          {project && !project.isTemp && (() => {
+            const isArchived = project.archived
+            const isRecent = project.updatedAt && (Date.now() - project.updatedAt < 7 * 24 * 60 * 60 * 1000)
+            const label = isArchived ? t('projectCard.archived') : isRecent ? t('projectCard.active') : t('projectCard.paused')
+            const color = isArchived ? 'var(--amber)' : isRecent ? 'var(--green)' : 'var(--amber)'
+            const bg = isArchived ? 'rgba(251,191,36,0.08)' : isRecent ? 'rgba(52,211,153,0.08)' : 'rgba(251,191,36,0.08)'
+            const border = isArchived ? 'rgba(251,191,36,0.2)' : isRecent ? 'rgba(52,211,153,0.2)' : 'rgba(251,191,36,0.2)'
+            return (
               <div style={{
-                background: 'var(--accent-glow)',
-                border: '1px solid var(--border)',
-                borderRadius: 12,
-                padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12,
-                fontSize: 13, color: 'var(--text-secondary)',
+                display: 'flex', alignItems: 'center', gap: 4,
+                background: bg, border: `1px solid ${border}`,
+                borderRadius: 4, padding: '1px 6px',
+                fontFamily: 'var(--font-mono)', fontSize: 9, color, letterSpacing: '0.05em',
               }}>
-                <span style={{ fontSize: 18 }}>✦</span>
-                <span>{
-                  triggerReason === 'semantic'
-                    ? '刚才产生了一个值得沉淀的结论，是否存入项目？'
-                    : triggerReason === 'file'
-                      ? '你上传了文件，是否创建项目统一管理？'
-                      : '这个话题已有一定深度，是否创建项目以便持续积累上下文？'
-                }</span>
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexShrink: 0 }}>
-                  <button
-                    onClick={handleCreateProject}
-                    style={{
-                      fontSize: 12, padding: '6px 14px', borderRadius: 8,
-                      cursor: 'pointer',
-                      background: 'var(--accent)',
-                      color: 'white', border: 'none', fontWeight: 600,
-                    }}
-                  >
-                    创建项目
-                  </button>
-                  <button
-                    onClick={() => setTriggerShown(false)}
-                    style={{
-                      fontSize: 12, padding: '6px 12px', borderRadius: 8,
-                      cursor: 'pointer', background: 'transparent', color: 'var(--text-muted)',
-                      border: '1px solid var(--border)',
-                    }}
-                  >
-                    稍后
-                  </button>
-                </div>
+                <div style={{ width: 4, height: 4, borderRadius: '50%', background: color }} />
+                {label}
               </div>
-            )}
+            )
+          })()}
+        </div>
 
-            <div ref={messagesEndRef} />
-          </div>
+        {/* Right buttons */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, WebkitAppRegion: 'no-drag' }}>
+          {[
+            { icon: '⌕', label: t('nav.search'), onClick: () => setShowSearch(true), active: false, show: true },
+            { icon: '⚙', label: t('nav.settings'), onClick: () => setShowSettings(true), active: false, show: true },
+            { icon: '⊞', label: panelOpen ? t('nav.hidePanel') : t('nav.showPanel'), onClick: () => setPanelOpen(v => !v), active: panelOpen, show: !project?.isTemp },
+          ].filter(b => b.show).map(b => (
+            <button
+              key={b.label}
+              onClick={b.onClick}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                height: 30, padding: '0 10px', borderRadius: 7,
+                border: `1px solid ${b.active ? 'var(--accent-border)' : 'var(--border)'}`,
+                background: b.active ? 'var(--accent-dim)' : 'var(--bg-card)',
+                color: b.active ? 'var(--accent-raw)' : 'var(--text-muted)',
+                cursor: 'pointer', fontSize: 11, fontWeight: 500,
+                fontFamily: 'var(--font-ui)', transition: 'all 0.15s', flexShrink: 0,
+              }}
+              onMouseEnter={e => { if (!b.active) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--border-strong)' } }}
+              onMouseLeave={e => { if (!b.active) { e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)' } }}
+            >
+              <span style={{ fontSize: 14, lineHeight: 1 }}>{b.icon}</span>
+              <span>{b.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
-          {/* 知识提取 banner：项目对话语义触发，固定在输入栏上方 */}
-          {knowledgeSuggestion && !project?.isTemp && (
-            <div style={{
-              padding: '8px 24px',
-              background: 'var(--teal-light)',
-              borderTop: '1px solid var(--teal-border)',
-              display: 'flex', alignItems: 'center', gap: 10,
-              fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0,
-            }}>
-              <span style={{ fontSize: 14, flexShrink: 0 }}>🧠</span>
-              <span style={{ flex: 1 }}>AI 刚给出了值得沉淀的结论，提取到项目知识库？</span>
-              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+      {/* ── Body ── */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+        {/* Sidebar — only for persisted projects */}
+        {project && !project.isTemp && (
+          <aside style={{
+            width: 196, minWidth: 196, flexShrink: 0,
+            background: 'var(--bg-panel)',
+            backdropFilter: 'blur(8px)',
+            borderRight: '1px solid var(--border)',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          }}>
+            {/* Conversations list */}
+            <div style={{ padding: '14px 8px 4px', flex: '0 0 auto' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '0 8px', marginBottom: 6 }}>
+                {t('chat.thisProject')}
+              </div>
+              <div>
+                <SidebarThread
+                  label={project.name}
+                  isActive={!threadId}
+                  onClick={() => navigate(`/project/${id}`)}
+                />
+                {projectThreads.map(th => (
+                  <SidebarThread
+                    key={th.id}
+                    label={th.title || t('chat.newThread')}
+                    preview={th.preview}
+                    isActive={threadId === th.id}
+                    onClick={() => navigate(`/project/${id}?thread=${th.id}`)}
+                    onDelete={() => handleDeleteThread(th.id)}
+                  />
+                ))}
                 <button
-                  onClick={handleExtractKnowledge}
-                  disabled={extractingKnowledge}
-                  style={{
-                    fontSize: 11, padding: '5px 12px', borderRadius: 6,
-                    cursor: extractingKnowledge ? 'default' : 'pointer',
-                    background: 'var(--teal)', color: 'white', border: 'none', fontWeight: 600,
-                    opacity: extractingKnowledge ? 0.6 : 1,
-                  }}
+                  onClick={handleNewThread}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, width: '100%', marginTop: 2, padding: '5px 8px', borderRadius: 5, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text-muted)', transition: 'all 0.15s', textAlign: 'left' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}
                 >
-                  {extractingKnowledge ? '提取中…' : '提取'}
-                </button>
-                <button
-                  onClick={() => setKnowledgeSuggestion(false)}
-                  style={{ fontSize: 11, padding: '5px 10px', borderRadius: 6, cursor: 'pointer', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
-                >
-                  忽略
+                  <span style={{ fontSize: 13, lineHeight: 1 }}>+</span>
+                  <span>{t('chat.newThread')}</span>
                 </button>
               </div>
             </div>
-          )}
 
-          {showVizSuggest && (
-            <VizSuggestBanner
-              selectedTypes={selectedVizTypes}
-              onToggle={(id) => setSelectedVizTypes(prev =>
-                prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
-              )}
-              onGenerate={() => {
-                if (selectedVizTypes.length === 0) return
-                const VIZ_PROMPTS = {
-                  mindmap:   '生成一个脑图（mindmap artifact，# / ## / ### Markdown 格式），梳理对话的核心结构和关键观点',
-                  flowchart: '生成一个流程图（flowchart artifact，graph TD Mermaid 格式），描述对话涉及的关键流程或决策路径',
-                  notes:     '生成一份结构化笔记（document artifact），整理对话的核心要点、结论和重要信息',
-                  actions:   '生成一个行动清单（document artifact），列出对话中明确的待办任务和下一步行动，用 - [ ] 格式',
-                  timeline:  '生成一个时间轴（document artifact），梳理对话涉及的重要里程碑和时间节点',
-                }
-                const parts = selectedVizTypes.map(id => `- ${VIZ_PROMPTS[id]}`).join('\n')
-                const prompt = selectedVizTypes.length === 1
-                  ? `帮我基于这段对话，${VIZ_PROMPTS[selectedVizTypes[0]]}。`
-                  : `帮我基于这段对话生成以下产出物，请按顺序逐一输出，每个都要完整：\n${parts}`
-                setShowVizSuggest(false)
-                setSelectedVizTypes([])
-                handleSend(prompt)
+            {/* Nav links — only workspace-level navigation */}
+            <div style={{ padding: '14px 8px 4px', flex: '0 0 auto' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '0 8px', marginBottom: 6 }}>
+                {t('nav.workbench')}
+              </div>
+              {[
+                { icon: '⊞', label: t('nav.overview'), path: '/', active: false },
+                { icon: '◈', label: t('nav.projects'), path: null, active: true },
+              ].map(item => (
+                <div
+                  key={item.label}
+                  onClick={() => item.path && navigate(item.path)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '6px 8px', borderRadius: 6, cursor: item.path ? 'pointer' : 'default',
+                    fontSize: 12, fontWeight: 500,
+                    fontFamily: 'var(--font-ui)',
+                    transition: 'background 0.1s, color 0.1s',
+                    background: item.active ? 'var(--accent-dim)' : 'transparent',
+                    border: item.active ? '1px solid var(--accent-border)' : '1px solid transparent',
+                    color: item.active ? 'var(--accent-raw)' : 'var(--text-secondary)',
+                    marginBottom: 1,
+                  }}
+                  onMouseEnter={e => { if (!item.active) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' } }}
+                  onMouseLeave={e => { if (!item.active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)' } }}
+                >
+                  <span style={{ fontSize: 11, width: 16, textAlign: 'center', opacity: 0.8 }}>{item.icon}</span>
+                  {item.label}
+                </div>
+              ))}
+            </div>
+
+            {/* Footer — spacer + user row */}
+            <div style={{ marginTop: 'auto', padding: '10px 8px', borderTop: '1px solid var(--border)' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '5px 8px', borderRadius: 6, cursor: 'pointer', transition: 'background 0.1s',
               }}
-              onDismiss={() => { setShowVizSuggest(false); setSelectedVizTypes([]) }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <div style={{
+                  width: 24, height: 24, borderRadius: 6, flexShrink: 0,
+                  background: 'linear-gradient(135deg, var(--accent-raw), var(--cyan))',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 9, fontWeight: 700, color: 'white',
+                  fontFamily: 'var(--font-ui)',
+                  boxShadow: '0 0 8px rgba(61,142,245,0.25)',
+                }}>{(displayName || 'U').charAt(0).toUpperCase()}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)' }}>{displayName}</div>
+                  <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {getUserProfile().role || 'ContextOS'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        )}
+
+        {/* ── Chat col + File panel ── */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+          {/* Chat column */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, borderRight: panelOpen && !project?.isTemp ? '1px solid var(--border)' : 'none' }}>
+
+            {renderSkillBar()}
+
+            {/* Messages scroll area */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+
+              {/* AI Brief — shown when project has messages */}
+              {messages.length > 0 && !project?.isTemp && (
+                <AIBrief project={project} msgCount={messages.length} onSend={handleSend} />
+              )}
+
+              <div style={{ padding: '18px 24px', display: 'flex', flexDirection: 'column', gap: 16, flex: 1 }}>
+
+                {/* Empty state */}
+                {messages.length === 0 && !streaming && (
+                  <div style={{ textAlign: 'center', padding: '80px 0', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ fontSize: 36, marginBottom: 14, color: 'var(--accent)' }}>✦</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)' }}>
+                      {t('chat.startTitle')}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                      {t('chat.startHint')}
+                    </div>
+                  </div>
+                )}
+
+                {/* Load more */}
+                {messages.length > displayCount && (
+                  <button
+                    onClick={() => setDisplayCount(n => n + 50)}
+                    style={{
+                      alignSelf: 'center', fontSize: 11, padding: '5px 14px',
+                      borderRadius: 8, cursor: 'pointer',
+                      background: 'var(--bg-hover)', color: 'var(--text-muted)',
+                      border: '1px solid var(--border)', transition: 'all 0.15s', fontFamily: 'var(--font-mono)',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.color = 'var(--text-secondary)'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+                  >
+                    {t('chat.loadMore', { count: messages.length - displayCount })}
+                  </button>
+                )}
+
+                {/* Messages */}
+                {messages.slice(-displayCount).map(msg => (
+                  <ChatMessage
+                    key={msg.id}
+                    message={msg}
+                    onSaveArtifact={handleSaveArtifact}
+                    onArtifactUpdate={handleArtifactUpdate}
+                    onEdit={!streaming ? handleEditMessage : undefined}
+                    onRegenerate={!streaming ? handleRegenerate : undefined}
+                    onRequestAiEdit={!streaming ? handleSend : undefined}
+                  />
+                ))}
+
+                {/* Streaming */}
+                {streaming && (
+                  <div style={{ display: 'flex', gap: 9, alignSelf: 'flex-start', width: '100%' }}>
+                    <div style={{
+                      width: 26, height: 26, borderRadius: 6, flexShrink: 0, marginTop: 2,
+                      background: 'var(--bg-card)', border: '1px solid var(--border)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 11, color: 'var(--accent)',
+                    }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 5, fontWeight: 500 }}>ContextOS AI</div>
+                      <div style={{
+                        padding: '10px 14px', borderRadius: '10px 10px 10px 2px',
+                        background: 'var(--bg-card)', border: '1px solid var(--border)',
+                        fontSize: 13, lineHeight: 1.65, color: 'var(--text-primary)',
+                      }}>
+                        {toolStatus ? (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--accent)' }}>
+                            <span style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>⚙</span>
+                            {toolStatus}
+                          </span>
+                        ) : streamingText ? (
+                          <div className="md">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {stripStreamingArtifacts(streamingText)}
+                            </ReactMarkdown>
+                          </div>
+                        ) : (
+                          <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                            {[0, 0.2, 0.4].map((delay, i) => (
+                              <span key={i} style={{
+                                width: 5, height: 5, borderRadius: '50%',
+                                background: 'var(--accent)', display: 'inline-block',
+                                animation: `pulse-dot 1.2s ease-in-out ${delay}s infinite`,
+                              }} />
+                            ))}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error */}
+                {error && (
+                  <div style={{
+                    padding: '12px 16px', borderRadius: 12,
+                    background: 'var(--red-bg)', border: '1px solid var(--red-border)',
+                    fontSize: 13, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 8,
+                  }}>
+                    <span style={{ flex: 1 }}>⚠️ {error}</span>
+                    {error.includes('API Key') && (
+                      <button
+                        onClick={() => setShowSettings(true)}
+                        style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 7, cursor: 'pointer', border: '1px solid var(--red-border)', background: 'var(--red-bg)', color: 'var(--red)' }}
+                      >打开设置</button>
+                    )}
+                  </div>
+                )}
+
+                {/* Upgrade to project trigger — temp chats only */}
+                {triggerShown && !showCreateModal && project?.isTemp && (
+                  <div style={{
+                    background: 'var(--accent-glow)', border: '1px solid var(--border)',
+                    borderRadius: 12, padding: '12px 16px',
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    fontSize: 13, color: 'var(--text-secondary)',
+                  }}>
+                    <span style={{ fontSize: 18 }}>✦</span>
+                    <span>{
+                      triggerReason === 'semantic'
+                        ? '刚才产生了一个值得沉淀的结论，是否存入项目？'
+                        : triggerReason === 'file'
+                          ? '你上传了文件，是否创建项目统一管理？'
+                          : '这个话题已有一定深度，是否创建项目以便持续积累上下文？'
+                    }</span>
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexShrink: 0 }}>
+                      <button
+                        onClick={handleCreateProject}
+                        style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, cursor: 'pointer', background: 'var(--accent)', color: 'white', border: 'none', fontWeight: 600 }}
+                      >创建项目</button>
+                      <button
+                        onClick={() => setTriggerShown(false)}
+                        style={{ fontSize: 12, padding: '6px 12px', borderRadius: 8, cursor: 'pointer', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+                      >稍后</button>
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+            </div>
+
+            {/* Knowledge extraction banner */}
+            {knowledgeSuggestion && !project?.isTemp && (
+              <div style={{
+                padding: '8px 20px',
+                background: 'var(--bg-card)',
+                borderTop: '1px solid var(--cyan-border)',
+                display: 'flex', alignItems: 'center', gap: 10,
+                fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0,
+              }}>
+                <span style={{ fontSize: 14, flexShrink: 0 }}>🧠</span>
+                <span style={{ flex: 1 }}>AI 刚给出了值得沉淀的结论，提取到项目知识库？</span>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button
+                    onClick={handleExtractKnowledge}
+                    disabled={extractingKnowledge}
+                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, cursor: extractingKnowledge ? 'default' : 'pointer', background: 'var(--cyan)', color: 'var(--bg-base)', border: 'none', fontWeight: 600, opacity: extractingKnowledge ? 0.6 : 1 }}
+                  >
+                    {extractingKnowledge ? '提取中…' : '提取'}
+                  </button>
+                  <button
+                    onClick={() => setKnowledgeSuggestion(false)}
+                    style={{ fontSize: 11, padding: '4px 9px', borderRadius: 5, cursor: 'pointer', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+                  >忽略</button>
+                </div>
+              </div>
+            )}
+
+            {showVizSuggest && (
+              <VizSuggestBanner
+                selectedTypes={selectedVizTypes}
+                onToggle={(vid) => setSelectedVizTypes(prev =>
+                  prev.includes(vid) ? prev.filter(v => v !== vid) : [...prev, vid]
+                )}
+                onGenerate={() => {
+                  if (selectedVizTypes.length === 0) return
+                  const VIZ_PROMPTS = {
+                    mindmap:   '生成一个脑图（mindmap artifact，# / ## / ### Markdown 格式），梳理对话的核心结构和关键观点',
+                    flowchart: '生成一个流程图（flowchart artifact，graph TD Mermaid 格式），描述对话涉及的关键流程或决策路径',
+                    notes:     '生成一份结构化笔记（document artifact），整理对话的核心要点、结论和重要信息',
+                    actions:   '生成一个行动清单（document artifact），列出对话中明确的待办任务和下一步行动，用 - [ ] 格式',
+                    timeline:  '生成一个时间轴（document artifact），梳理对话涉及的重要里程碑和时间节点',
+                  }
+                  const parts = selectedVizTypes.map(vid => `- ${VIZ_PROMPTS[vid]}`).join('\n')
+                  const prompt = selectedVizTypes.length === 1
+                    ? `帮我基于这段对话，${VIZ_PROMPTS[selectedVizTypes[0]]}。`
+                    : `帮我基于这段对话生成以下产出物，请按顺序逐一输出，每个都要完整：\n${parts}`
+                  setShowVizSuggest(false)
+                  setSelectedVizTypes([])
+                  handleSend(prompt)
+                }}
+                onDismiss={() => { setShowVizSuggest(false); setSelectedVizTypes([]) }}
+              />
+            )}
+
+            <InputBar
+              onSend={handleSend}
+              onFileUpload={handleFileUpload}
+              disabled={streaming}
+              tokenPercent={tokenPercent}
+              messageCount={messages.length}
+              onCommand={handleCommand}
+              onNewNote={handleNewNote}
+            />
+          </div>
+
+          {/* Right panel */}
+          {panelOpen && !project?.isTemp && (
+            <FilePanel
+              project={project}
+              files={files}
+              messages={messages}
+              tokenPercent={tokenPercent}
+              onConsolidateKnowledge={handleConsolidateKnowledge}
+              onGenerateSummary={handleGenerateSummary}
+              onSummaryEdit={async (text) => {
+                const updated = { ...project, status: text, updatedAt: Date.now() }
+                await saveProject(updated)
+                setProject(updated)
+              }}
+              onClose={() => setPanelOpen(false)}
+              memory={memory}
+              reflectionRunning={reflectionRunning}
+              onMemoryEdit={handleMemoryEdit}
+              onReflect={handleManualReflect}
+              onKnowledgeEdit={async (arr) => {
+                const updated = { ...project, knowledge: arr, updatedAt: Date.now() }
+                await saveProject(updated)
+                setProject(updated)
+              }}
             />
           )}
-
-          <InputBar
-            onSend={handleSend}
-            onFileUpload={handleFileUpload}
-            disabled={streaming}
-            tokenPercent={tokenPercent}
-            messageCount={messages.length}
-            onCommand={handleCommand}
-            onNewNote={handleNewNote}
-          />
         </div>
-
-        {/* Right panel — only in project mode */}
-        {panelOpen && !project?.isTemp && (
-          <FilePanel
-            project={project}
-            files={files}
-            messages={messages}
-            tokenPercent={tokenPercent}
-            onConsolidateKnowledge={handleConsolidateKnowledge}
-            onGenerateSummary={handleGenerateSummary}
-            onSummaryEdit={async (text) => {
-              const updated = { ...project, status: text, updatedAt: Date.now() }
-              await saveProject(updated)
-              setProject(updated)
-            }}
-            onClose={() => setPanelOpen(false)}
-            memory={memory}
-            reflectionRunning={reflectionRunning}
-            onMemoryEdit={handleMemoryEdit}
-            onReflect={handleManualReflect}
-            onKnowledgeEdit={async (text) => {
-              const updated = { ...project, knowledge: text, updatedAt: Date.now() }
-              await saveProject(updated)
-              setProject(updated)
-            }}
-          />
-        )}
       </div>
 
+      {/* Modals */}
       {showCreateModal && (
         <CreateProjectModal
           suggestedName={suggestedMeta.name}
@@ -1275,7 +1364,6 @@ graph TD
           onCancel={() => setShowCreateModal(false)}
         />
       )}
-
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showSearch && (
         <SearchModal
@@ -1283,7 +1371,6 @@ graph TD
           onNavigate={(projectId) => { setShowSearch(false); navigate(`/project/${projectId}`) }}
         />
       )}
-      </div>{/* /Right column */}
     </div>
   )
 }
@@ -1354,13 +1441,6 @@ function VizSuggestBanner({ selectedTypes, onToggle, onGenerate, onDismiss }) {
   )
 }
 
-const topBtnStyle = {
-  display: 'flex', alignItems: 'center', gap: 5,
-  padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500,
-  cursor: 'pointer', border: '1px solid var(--border)',
-  background: 'var(--bg-card)', color: 'var(--text-secondary)', transition: 'all 0.15s',
-  backdropFilter: 'blur(8px)',
-}
 
 const EMOJI_LIST = [
   '📁','💼','🚀','🎯','💡','🔬','🧠','⚡','🌟','🔥',
@@ -1431,42 +1511,84 @@ function SkillPickerPopover({ skills, activeSkillId, onSelect, onClear, onClose 
   )
 }
 
-function SidebarThread({ label, preview, isActive, onClick }) {
+function SidebarThread({ label, preview, isActive, onClick, onDelete }) {
   const [hovered, setHovered] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+
+  function handleDeleteClick(e) {
+    e.stopPropagation()
+    setConfirming(true)
+  }
+  function handleConfirm(e) {
+    e.stopPropagation()
+    setConfirming(false)
+    onDelete()
+  }
+  function handleCancel(e) {
+    e.stopPropagation()
+    setConfirming(false)
+  }
+
   return (
     <div
-      onClick={onClick}
+      onClick={!confirming ? onClick : undefined}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseLeave={() => { setHovered(false); setConfirming(false) }}
       style={{
         display: 'flex', alignItems: 'flex-start', gap: 6,
-        padding: '5px 8px', borderRadius: 5, cursor: 'pointer',
-        background: isActive ? 'var(--bg-hover)' : hovered ? 'var(--bg-hover)' : 'none',
-        marginBottom: 1,
+        padding: '5px 8px', borderRadius: 5, cursor: confirming ? 'default' : 'pointer',
+        background: confirming ? 'rgba(239,68,68,0.06)' : isActive ? 'var(--bg-hover)' : hovered ? 'var(--bg-hover)' : 'none',
+        border: confirming ? '1px solid rgba(239,68,68,0.2)' : '1px solid transparent',
+        marginBottom: 1, position: 'relative',
       }}
     >
-      <span style={{
-        width: 5, height: 5, borderRadius: '50%', flexShrink: 0, marginTop: 4,
-        background: isActive ? 'var(--accent)' : 'var(--border)',
-        display: 'inline-block', transition: 'background 0.15s',
-      }} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontSize: 11, color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-          fontWeight: isActive ? 600 : 400,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4,
-        }}>
-          {label}
+      {confirming ? (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+          <span style={{ fontSize: 10, color: 'var(--red, #ef4444)', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>确认删除？</span>
+          <button onClick={handleConfirm} style={{ fontSize: 9, padding: '1px 6px', borderRadius: 3, border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.1)', color: 'var(--red, #ef4444)', cursor: 'pointer', flexShrink: 0 }}>删除</button>
+          <button onClick={handleCancel} style={{ fontSize: 9, padding: '1px 6px', borderRadius: 3, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}>取消</button>
         </div>
-        {preview && (
-          <div style={{
-            fontSize: 10, color: 'var(--text-muted)', marginTop: 1,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {preview}
+      ) : (
+        <>
+          <span style={{
+            width: 5, height: 5, borderRadius: '50%', flexShrink: 0, marginTop: 4,
+            background: isActive ? 'var(--accent)' : 'var(--border)',
+            display: 'inline-block', transition: 'background 0.15s',
+          }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 11, color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+              fontWeight: isActive ? 600 : 400,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4,
+              paddingRight: onDelete && hovered ? 16 : 0,
+            }}>
+              {label}
+            </div>
+            {preview && (
+              <div style={{
+                fontSize: 10, color: 'var(--text-muted)', marginTop: 1,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {preview}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+          {onDelete && hovered && (
+            <button
+              onClick={handleDeleteClick}
+              style={{
+                position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+                width: 16, height: 16, borderRadius: 4, border: 'none',
+                background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 10, padding: 0, lineHeight: 1,
+              }}
+              onMouseEnter={e => { e.stopPropagation(); e.currentTarget.style.color = 'var(--red, #ef4444)'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'transparent' }}
+            >✕</button>
+          )}
+        </>
+      )}
     </div>
   )
 }

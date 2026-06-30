@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plug, Sparkles, LayoutDashboard, FolderOpen, MessageSquare, Settings, Search, ExternalLink, Cpu, Globe, Terminal, CheckCircle, Loader } from 'lucide-react'
+import { Plug, Search, ExternalLink, Cpu, Globe, Terminal, CheckCircle, Loader } from 'lucide-react'
+import AppRail from '../components/AppRail'
 import { DEMO_SERVERS, searchMCPServers, getConnectedServers, saveConnectedServer, removeConnectedServer } from '../lib/mcp'
 import { BUILTIN_SKILLS, installSkillFull } from '../lib/skills'
 import { saveProject } from '../store/db'
@@ -43,7 +44,6 @@ export default function MCPPage() {
   const [keyModal, setKeyModal] = useState(null) // null | { server, value }
   const profile = getUserProfile()
   const displayName = profile.name || 'ContextOS'
-  const displayRole = profile.role || t('nav.welcome')
 
   // debounce: 300ms delay
   useEffect(() => {
@@ -111,7 +111,7 @@ export default function MCPPage() {
       const projectId = crypto.randomUUID()
       const now = Date.now()
       await saveProject({
-        id: projectId, name: template.name, knowledge: template.desc,
+        id: projectId, name: template.name, knowledge: [],
         status: '', model: template.model || DEFAULT_MODEL,
         icon: template.icon, isTemp: false,
         systemPrompt: template.systemPrompt,
@@ -129,88 +129,39 @@ export default function MCPPage() {
   const sep = i18n.language === 'zh' ? '、' : ', '
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>
-      {/* Sidebar */}
-      <aside style={{
-        width: 220, minWidth: 220,
-        background: window.electronAPI ? 'transparent' : 'var(--bg-surface)',
-        borderRight: '1px solid var(--border)',
-        display: 'flex', flexDirection: 'column', padding: '18px 0', flexShrink: 0,
-        WebkitAppRegion: 'drag',
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>
+      {/* Titlebar */}
+      <div style={{
+        height: 50, flexShrink: 0,
+        background: 'var(--bg-titlebar)', backdropFilter: 'blur(12px)',
+        borderBottom: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        position: 'relative',
+        WebkitAppRegion: window.electronAPI ? 'drag' : undefined,
+        paddingLeft: window.electronAPI ? 72 : 0,
       }}>
-        <div style={{
-          padding: '0 18px 24px', display: 'flex', alignItems: 'center', gap: 9,
-          paddingTop: window.electronAPI ? 44 : undefined,
-          WebkitAppRegion: 'no-drag',
-        }}>
-          <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--accent-border)' }}>
-            <span style={{ color: 'white', fontSize: 13, fontWeight: 700 }}>C</span>
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-            Context<span style={{ color: 'var(--accent)' }}>OS</span>
-          </div>
-        </div>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)' }}>
+          ⬡ {t('nav.mcp')}
+        </span>
+        <button
+          onClick={() => setShowSettings(true)}
+          title="设置"
+          style={{
+            position: 'absolute', right: 16,
+            width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border)',
+            background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
+            WebkitAppRegion: 'no-drag',
+          }}
+        >⚙</button>
+      </div>
 
-        <nav style={{ padding: '0 10px', flex: 1, WebkitAppRegion: 'no-drag' }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', padding: '0 8px', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('nav.workbench')}</div>
-          {[
-            { icon: <LayoutDashboard size={15} />, label: t('nav.overview'), path: '/' },
-            { icon: <FolderOpen size={15} />, label: t('nav.projects'), path: '/' },
-            { icon: <MessageSquare size={15} />, label: t('nav.conversations'), path: '/' },
-            { icon: <Sparkles size={15} />, label: t('nav.skills'), path: '/skills' },
-            { icon: <Plug size={15} />, label: t('nav.mcp'), path: '/mcp', active: true },
-          ].map(item => (
-            <div key={item.label} onClick={() => navigate(item.path)} style={{
-              display: 'flex', alignItems: 'center', gap: 9,
-              padding: '7px 8px', borderRadius: 7, cursor: 'pointer',
-              background: item.active ? 'var(--accent-glow)' : 'transparent',
-              color: item.active ? 'var(--accent)' : 'var(--text-secondary)',
-              fontSize: 13, fontWeight: item.active ? 600 : 400, transition: 'all 0.15s', marginBottom: 2,
-            }}
-            onMouseEnter={e => { if (!item.active) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' } }}
-            onMouseLeave={e => { if (!item.active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)' } }}
-            >
-              <span style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>{item.icon}</span>
-              <span style={{ flex: 1 }}>{item.label}</span>
-            </div>
-          ))}
-        </nav>
+      {/* Body */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <AppRail activePage="mcp" navigate={navigate} onAvatarClick={() => setShowSettings(true)} displayName={displayName} />
 
-        {connectedCount > 0 && (
-          <div style={{
-            margin: '0 10px 8px', padding: '10px 12px', borderRadius: 10,
-            background: 'var(--accent-glow)', border: '1px solid var(--border)',
-          }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', marginBottom: 4 }}>
-              {t('mcp.connectedCount', { count: connectedCount })}
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-              {getConnectedServers().map(s => s.name).join(sep)}
-            </div>
-          </div>
-        )}
-
-        <div style={{ padding: '10px 10px 0', borderTop: '1px solid var(--border)', WebkitAppRegion: 'no-drag' }}>
-          <div
-            onClick={() => setShowSettings(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', transition: 'background 0.15s' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg, var(--accent), var(--teal))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white', border: '1px solid var(--accent-border)' }}>
-              {displayName.charAt(0).toUpperCase() || 'U'}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{displayRole}</div>
-            </div>
-            <Settings size={13} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-          </div>
-        </div>
-      </aside>
-
-      {/* Main */}
-      <main style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
+        {/* Main content */}
+        <main style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
         {/* Header */}
         <div style={{ marginBottom: 32 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
@@ -303,6 +254,7 @@ export default function MCPPage() {
           </div>
         </section>
       </main>
+      </div>{/* end Body */}
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
 

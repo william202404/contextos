@@ -78,7 +78,7 @@ export default function DecomposeModal({ onClose, onCreated }) {
         id: crypto.randomUUID(),
         name: p.name || t('overview.newProject'),
         status: '',
-        knowledge: p.summary || '',
+        knowledge: p.summary ? [{ id: crypto.randomUUID(), content: p.summary, date: new Date().toLocaleDateString('zh-CN'), type: 'conclusion' }] : [],
         icon: p.icon || '📁',
         model: DEFAULT_MODEL,
         createdAt: now,

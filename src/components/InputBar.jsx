@@ -273,7 +273,7 @@ export default function InputBar({
 
 const toolBtnStyle = {
   display: 'flex', alignItems: 'center', gap: 5,
-  padding: '5px 10px', borderRadius: 8,
+  padding: '6px 11px', borderRadius: 8,
   border: '1px solid var(--border)', background: 'var(--bg-card)',
   color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer',
   transition: 'all 0.15s',

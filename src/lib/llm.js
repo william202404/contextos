@@ -408,40 +408,46 @@ export async function generateProjectMeta(messages, model = DEFAULT_MODEL) {
 }
 
 // 从对话中提取可复用知识，追加到已有知识库
-export async function generateKnowledgeUpdate(messages, existingKnowledge = '', model = DEFAULT_MODEL) {
-  const today = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
+// Returns array of new knowledge items [{ id, content, date, type }] or null
+export async function generateKnowledgeUpdate(messages, existingKnowledge = [], model = DEFAULT_MODEL) {
+  const today = new Date().toLocaleDateString('zh-CN')
   const convText = messages.slice(-20)
     .map(m => `${m.role === 'user' ? '用户' : 'AI'}: ${(m.content || '').slice(0, 400)}`)
     .join('\n\n')
 
+  const existingStr = Array.isArray(existingKnowledge)
+    ? existingKnowledge.map(k => `- ${k.content}`).join('\n')
+    : (existingKnowledge || '')
+
   return new Promise((resolve) => {
-    let result = ''
     streamMessage({
       model,
-      systemPrompt: `你是项目知识管理助手。从对话中提取可复用的结论、方法、决策，用JSON输出，不要输出其他内容：
-{"newKnowledge": "- [${today}] 结论内容（如无新结论输出null）"}
+      systemPrompt: `你是项目知识管理助手。从对话中提取可复用的结论、方法、决策，用JSON数组输出，不要输出其他内容：
+{"items": [{"content": "结论内容（≤50字）", "type": "conclusion"}]}
 
-规则：
-- 只提取本次对话新出现的、具体可复用的结论或方法
+type 取值：conclusion（结论）| method（方法）| decision（决策）
+- 只提取本次对话新出现的、具体可复用内容
 - 不重复已有知识库中的内容
-- 如果本次对话没有产生可复用知识，newKnowledge 输出 null
-- 每条结论以 "- [日期] " 开头，不超过50字`,
+- 如果没有新知识，输出 {"items": []}`,
       messages: [
         {
           role: 'user',
-          content: `已有知识库：\n${existingKnowledge || '（空）'}\n\n最近对话：\n${convText}`,
+          content: `已有知识库：\n${existingStr || '（空）'}\n\n最近对话：\n${convText}`,
         },
       ],
-      onChunk: (_, full) => { result = full },
+      onChunk: () => {},
       onDone: (full) => {
         try {
           const cleaned = full.replace(/```json\n?|\n?```/g, '').trim()
           const parsed = JSON.parse(cleaned)
-          if (!parsed.newKnowledge || parsed.newKnowledge === 'null') {
-            resolve(null)
-          } else {
-            resolve(parsed.newKnowledge)
-          }
+          const items = (parsed.items || []).filter(i => i.content?.trim())
+          if (items.length === 0) { resolve(null); return }
+          resolve(items.map(i => ({
+            id: crypto.randomUUID(),
+            content: i.content.trim(),
+            date: today,
+            type: i.type || 'conclusion',
+          })))
         } catch {
           resolve(null)
         }
@@ -451,16 +457,36 @@ export async function generateKnowledgeUpdate(messages, existingKnowledge = '', 
   })
 }
 
-// 对知识库条目去重整合，条目过多时压缩
-export async function consolidateKnowledge(knowledge, model = DEFAULT_MODEL) {
+// 对知识库条目去重整合，返回整合后的数组
+export async function consolidateKnowledge(items = [], model = DEFAULT_MODEL) {
+  const inputStr = Array.isArray(items)
+    ? items.map(k => `- [${k.date || ''}] [${k.type || 'conclusion'}] ${k.content}`).join('\n')
+    : items
   return new Promise((resolve) => {
     streamMessage({
       model,
-      systemPrompt: `你是项目知识管理助手。对以下知识库进行整合：合并含义相近的条目、删除明显重复内容、保留关键结论。用相同的 "- [日期] 内容" 格式输出整合后的知识库，日期保留原始日期（有多个相近条目时取最新日期），不输出其他内容。`,
-      messages: [{ role: 'user', content: knowledge }],
+      systemPrompt: `你是项目知识管理助手。对以下知识库进行整合：合并含义相近的条目、删除明显重复内容、保留关键结论。
+用JSON数组输出整合后的知识库，格式：
+{"items": [{"content": "内容", "date": "原始日期", "type": "conclusion|method|decision"}]}
+不输出其他内容。`,
+      messages: [{ role: 'user', content: inputStr }],
       onChunk: () => {},
-      onDone: (full) => resolve(full.trim() || knowledge),
-      onError: () => resolve(knowledge),
+      onDone: (full) => {
+        try {
+          const cleaned = full.replace(/```json\n?|\n?```/g, '').trim()
+          const parsed = JSON.parse(cleaned)
+          const result = (parsed.items || []).map(i => ({
+            id: crypto.randomUUID(),
+            content: i.content?.trim() || '',
+            date: i.date || new Date().toLocaleDateString('zh-CN'),
+            type: i.type || 'conclusion',
+          })).filter(i => i.content)
+          resolve(result.length > 0 ? result : items)
+        } catch {
+          resolve(items)
+        }
+      },
+      onError: () => resolve(items),
     })
   })
 }

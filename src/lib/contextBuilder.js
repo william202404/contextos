@@ -1,10 +1,17 @@
 import { INTENT } from './intentDetector'
 
+// Normalize knowledge field to string lines for LLM injection
+function knowledgeToLines(knowledge) {
+  if (Array.isArray(knowledge)) return knowledge.map(k => `- [${k.type || 'conclusion'}] ${k.content}`)
+  if (typeof knowledge === 'string') return knowledge.split('\n').filter(l => l.trim())
+  return []
+}
+
 // 按用户消息关键词对知识条目做相关度排序，最多返回 maxLines 条
 function filterKnowledge(knowledge, userMessage, maxLines = 8) {
-  if (!knowledge) return ''
-  const lines = knowledge.split('\n').filter(l => l.trim())
-  if (lines.length <= maxLines) return knowledge
+  const lines = knowledgeToLines(knowledge)
+  if (lines.length === 0) return ''
+  if (lines.length <= maxLines) return lines.join('\n')
 
   const words = (userMessage.match(/[一-龥a-z0-9]{2,}/g) || [])
   if (words.length === 0) return lines.slice(0, maxLines).join('\n')
@@ -20,9 +27,8 @@ function filterKnowledge(knowledge, userMessage, maxLines = 8) {
 // 返回用于 context bar 显示的注入说明（不含技能）
 export function describeInjection(intent, project) {
   if (!project || project.isTemp) return null
-  const hasStatus = !!project.status && !['active', 'archived'].includes(project.status)
-  const knowledgeLines = (project.knowledge || '').split('\n').filter(l => l.trim())
-  const kCount = Math.min(knowledgeLines.length, 8)
+  const hasStatus = !!project.status
+  const kCount = Math.min(knowledgeToLines(project.knowledge).length, 8)
 
   switch (intent) {
     case INTENT.KNOWLEDGE_QUERY:
@@ -43,7 +49,7 @@ export function buildProjectContext(intent, project, memory, skills = [], userMe
 
   const { name, status, knowledge } = project
   const memoryText = memory?.content || ''
-  const hasStatus = status && !['active', 'archived'].includes(status)
+  const hasStatus = !!status
   const relevantKnowledge = filterKnowledge(knowledge, userMessage)
 
   let ctx

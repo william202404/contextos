@@ -8,7 +8,11 @@
     "mcp": "MCP Tools",
     "noConversations": "No conversations yet",
     "moreItems": "{{count}} more…",
-    "welcome": "Welcome"
+    "welcome": "Welcome",
+    "search": "Search",
+    "settings": "Settings",
+    "showPanel": "Panel",
+    "hidePanel": "Panel"
   },
   "settings": {
     "title": "Settings",
@@ -125,9 +129,29 @@
     "threadList": "Threads",
     "navigation": "Navigate",
     "bindSkill": "Bind Skill",
-    "unbindSkill": "Unbind",
+    "unbindSkill": "Unbind Skill",
     "defaultSkill": "Default Skill",
-    "noTitle": "Untitled"
+    "noTitle": "Untitled",
+    "thisProject": "This Project",
+    "startTitle": "Start a Conversation",
+    "startHint": "Type a message, AI will help you think and organize",
+    "loadMore": "Load more ({{count}} remaining)"
+  },
+  "brief": {
+    "title": "ContextOS · Project Brief",
+    "rounds": "{{count}} rounds",
+    "knowledge": "{{count}} insights",
+    "noSummary": "No summary yet",
+    "collapse": "Close ∧",
+    "concluded": "Concluded",
+    "pending": "Pending",
+    "inProgress": "In Progress",
+    "continueBtn": "→ Continue",
+    "newTopicBtn": "💬 New Topic",
+    "reviewBtn": "🔄 Review",
+    "customBtn": "+ Custom",
+    "continuePrompt": "Let's continue our last discussion.",
+    "reviewPrompt": "Help me do a project review, summarizing progress, outcomes, and next steps."
   },
   "skills": {
     "pageTitle": "Skills",
@@ -186,6 +210,7 @@
   "projectCard": {
     "active": "Active",
     "paused": "Paused",
+    "archived": "Archived",
     "noSummary": "No summary yet",
     "context": "Context",
     "rounds": "turns",
@@ -304,6 +329,7 @@
     "flowchart": "Flowchart",
     "mindmap": "Mind Map",
     "document": "Document",
+    "gantt": "Gantt Chart",
     "zoomIn": "Zoom In",
     "zoomOut": "Zoom Out",
     "reset": "Reset",
@@ -317,6 +343,7 @@
     "sendToAi": "Send to AI",
     "save": "Save",
     "saveToProject": "↓ Save to Project",
+    "saved": "Saved",
     "rendering": "Rendering…",
     "previewHint": "Auto-preview after editing code…",
     "scrollHint": "Scroll to zoom · Drag to pan",

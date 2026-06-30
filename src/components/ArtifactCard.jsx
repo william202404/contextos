@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { GitBranch, Network, FileText, Pencil, X, Check, ZoomIn, ZoomOut, Maximize2, RotateCcw, Download } from 'lucide-react'
+import { GitBranch, Network, FileText, Pencil, X, Check, ZoomIn, ZoomOut, Maximize2, RotateCcw, Download, BarChart2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 const getMermaid = () => import('../lib/mermaidInit').then(m => m.getMermaid())
 import MarkmapViewer from './MarkmapViewer'
 
 const TYPE_MAP = {
-  flowchart: { Icon: GitBranch, color: 'var(--accent)',  bg: 'var(--accent-glow)' },
-  mindmap:   { Icon: Network,   color: 'var(--cyan)',   bg: 'var(--cyan-bg)' },
-  document:  { Icon: FileText,  color: 'var(--green)',  bg: 'var(--green-bg)' },
+  flowchart: { Icon: GitBranch,  color: 'var(--accent)', bg: 'var(--accent-glow)' },
+  mindmap:   { Icon: Network,    color: 'var(--cyan)',   bg: 'var(--cyan-bg)' },
+  document:  { Icon: FileText,   color: 'var(--green)',  bg: 'var(--green-bg)' },
+  gantt:     { Icon: BarChart2,  color: 'var(--amber)',  bg: 'rgba(251,191,36,0.08)' },
 }
 
 export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEdit }) {
@@ -17,7 +18,7 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
   const info = TYPE_MAP[artifact.type] || TYPE_MAP.document
   const { Icon } = info
   const typeLabel = t(`artifact.${artifact.type}`, artifact.type)
-  const isMermaid  = artifact.type === 'flowchart'
+  const isMermaid  = artifact.type === 'flowchart' || artifact.type === 'gantt'
   const isMindmap  = artifact.type === 'mindmap'
   const isDocument = artifact.type === 'document'
 
@@ -48,6 +49,14 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
 
   // ── Fullscreen ───────────────────────────────────────────
   const [fullscreen, setFullscreen] = useState(false)
+
+  // ── Save feedback ────────────────────────────────────────
+  const [saved, setSaved] = useState(false)
+  function handleSave() {
+    onSave(artifact)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
 
   // ── Effects ──────────────────────────────────────────────
 
@@ -313,7 +322,9 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
               </>
             )}
             {!editMode && onSave && (
-              <button onClick={() => onSave(artifact)} style={{ ...actionBtn, marginLeft: 4 }}>{t('artifact.saveToProject')}</button>
+              <button onClick={handleSave} style={{ ...actionBtn, marginLeft: 4, color: saved ? 'var(--green)' : undefined }}>
+                {saved ? '✓ ' + t('artifact.saved') : t('artifact.saveToProject')}
+              </button>
             )}
           </div>
         </div>

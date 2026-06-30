@@ -8,7 +8,11 @@
     "mcp": "MCP 工具",
     "noConversations": "暂无对话记录",
     "moreItems": "还有 {{count}} 条…",
-    "welcome": "欢迎使用"
+    "welcome": "欢迎使用",
+    "search": "搜索",
+    "settings": "设置",
+    "showPanel": "面板",
+    "hidePanel": "面板"
   },
   "settings": {
     "title": "设置",
@@ -121,13 +125,33 @@
   },
   "chat": {
     "defaultThread": "默认对话",
-    "newThread": "新建对话",
+    "newThread": "新对话",
     "threadList": "对话列表",
     "navigation": "导航",
     "bindSkill": "绑定技能",
-    "unbindSkill": "取消绑定",
+    "unbindSkill": "解绑技能",
     "defaultSkill": "项目默认技能",
-    "noTitle": "无标题"
+    "noTitle": "无标题",
+    "thisProject": "本项目",
+    "startTitle": "开始对话",
+    "startHint": "输入内容，AI 会帮你思考和整理",
+    "loadMore": "加载更多历史（还有 {{count}} 条）"
+  },
+  "brief": {
+    "title": "ContextOS · 项目简报",
+    "rounds": "{{count}} 轮对话",
+    "knowledge": "{{count}} 条知识",
+    "noSummary": "暂无摘要",
+    "collapse": "收起 ∧",
+    "concluded": "已决策",
+    "pending": "待确认",
+    "inProgress": "进行中",
+    "continueBtn": "→ 继续上次",
+    "newTopicBtn": "💬 新话题",
+    "reviewBtn": "🔄 复盘",
+    "customBtn": "+ 自定义",
+    "continuePrompt": "继续我们上次的讨论。",
+    "reviewPrompt": "帮我对这个项目做阶段性复盘，梳理进展、成果和下一步计划。"
   },
   "skills": {
     "pageTitle": "技能库",
@@ -186,6 +210,7 @@
   "projectCard": {
     "active": "进行中",
     "paused": "暂停",
+    "archived": "已归档",
     "noSummary": "暂无摘要",
     "context": "上下文",
     "rounds": "轮",
@@ -304,6 +329,7 @@
     "flowchart": "流程图",
     "mindmap": "脑图",
     "document": "文档",
+    "gantt": "甘特图",
     "zoomIn": "放大",
     "zoomOut": "缩小",
     "reset": "重置",
@@ -317,6 +343,7 @@
     "sendToAi": "发送给 AI",
     "save": "保存",
     "saveToProject": "↓ 存入项目",
+    "saved": "已存入",
     "rendering": "渲染中…",
     "previewHint": "修改代码后自动预览…",
     "scrollHint": "滚轮缩放 · 拖拽平移",

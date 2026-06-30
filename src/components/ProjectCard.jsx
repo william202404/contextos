@@ -15,17 +15,15 @@ export default function ProjectCard({ project, onDelete, onArchive }) {
     getProjectStats(project.id).then(s => setStats(s))
   }, [project.id])
 
-  const displayText = project.status && project.status !== 'active' && project.status !== 'archived'
-    ? project.status
-    : project.summary
+  const displayText = project.status || project.summary
 
   const TOKEN_WINDOW = 200000
   const tokenPercent = stats?.totalChars != null
     ? Math.min(99, Math.round(stats.totalChars / (TOKEN_WINDOW * 2.5) * 100))
     : 0
 
-  const knowledgeCount = project.knowledge
-    ? project.knowledge.split('\n').filter(l => l.trim()).length
+  const knowledgeCount = Array.isArray(project.knowledge)
+    ? project.knowledge.length
     : 0
 
   const isActive = project.updatedAt && (Date.now() - project.updatedAt < 7 * 24 * 60 * 60 * 1000)

@@ -44,16 +44,32 @@
       "title": "ContextOS"
     },
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64", "arm64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
       "icon": "build/icon.ico"
     },
     "linux": {
-      "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.png",
       "category": "Office"
     }
   },
   "dependencies": {
+    "i18next": "^26.3.3",
     "idb": "^8.0.3",
     "lucide-react": "^1.18.0",
     "mammoth": "^1.12.0",
@@ -63,6 +79,7 @@
     "pdfjs-dist": "^6.0.227",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-i18next": "^17.0.8",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.17.0",
     "remark-gfm": "^4.0.1",

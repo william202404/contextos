@@ -1,29 +1,34 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LayoutDashboard, FolderOpen, MessageSquare, Sparkles, Settings, Search, Download, Check, Zap, Cloud, Trash2, Plug, X } from 'lucide-react'
 import { BUILTIN_SKILLS, SKILL_CATEGORIES, getInstalledSkills, installSkillFull, uninstallSkillFull } from '../lib/skills'
 import { searchSkillHub, normalizeSkillHubSkill } from '../lib/skillhub'
 import { getUserProfile } from '../components/SettingsModal'
 import SettingsModal from '../components/SettingsModal'
-import { useTranslation } from 'react-i18next'
+import AppRail from '../components/AppRail'
+
+const isElectron = !!window.electronAPI
+
+// Featured skills shown in "核心技能" section
+const CORE_IDS = ['pm-assistant', 'competitive-analysis', 'project-retro', 'user-research', 'literature-distiller', 'upward-communication']
+const CONTEXTOS_IDS = ['knowledge-extractor', 'context-optimizer']
+const BADGE_MAP = {
+  'pm-assistant': { label: 'HOT', color: 'var(--amber)', bg: 'rgba(251,191,36,0.08)', border: 'rgba(251,191,36,0.25)' },
+  'competitive-analysis': { label: 'CORE', color: 'var(--accent-raw)', bg: 'var(--accent-dim)', border: 'var(--accent-border)' },
+  'knowledge-extractor': { label: '专属', color: 'var(--accent-raw)', bg: 'var(--accent-dim)', border: 'var(--accent-border)' },
+}
 
 export default function SkillsPage() {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const [activeCategory, setActiveCategory] = useState('全部')
   const [installedSkills, setInstalledSkills] = useState([])
-  const [activeTab, setActiveTab] = useState('market') // 'market' | 'installed'
+  const [activeTab, setActiveTab] = useState('all') // 'all' | 'installed'
   const [search, setSearch] = useState('')
   const [skillhubSkills, setSkillhubSkills] = useState([])
-  const [skillhubLoading, setSkillhubLoading] = useState(true)
-  const [showSettings, setShowSettings] = useState(false)
   const [installingId, setInstallingId] = useState(null)
-  const [selectedSkill, setSelectedSkill] = useState(null)
+  const [showSettings, setShowSettings] = useState(false)
 
   const profile = getUserProfile()
-  const displayName = profile.name || 'ContextOS'
-  const displayRole = profile.role || t('nav.welcome')
-
+  const displayName = profile.name || 'U'
   const installedIds = installedSkills.map(s => s.id)
 
   async function loadInstalled() {
@@ -31,35 +36,33 @@ export default function SkillsPage() {
   }
 
   async function loadSkillHub(q = '') {
-    setSkillhubLoading(true)
     try {
-      const results = await searchSkillHub(q, 60)
+      const results = await searchSkillHub(q, 40)
       setSkillhubSkills(results.map(normalizeSkillHubSkill))
     } catch {
-      // SkillHub unavailable — silently fall back to BUILTIN_SKILLS only
       setSkillhubSkills([])
-    } finally {
-      setSkillhubLoading(false)
     }
   }
 
   useEffect(() => { loadInstalled() }, [])
-
-  // debounce search: immediate on mount, 500ms delay on input
   useEffect(() => {
     const timer = setTimeout(() => loadSkillHub(search), search ? 500 : 0)
     return () => clearTimeout(timer)
   }, [search])
 
-  const allSkills = [...BUILTIN_SKILLS, ...skillhubSkills]
+  const allSkills = [...BUILTIN_SKILLS, ...skillhubSkills.filter(s => !BUILTIN_SKILLS.find(b => b.id === s.id))]
 
   const filtered = allSkills.filter(s => {
     const matchCat = activeCategory === '全部' || s.category === activeCategory
-    const matchSearch = !search || s.name.includes(search) || s.desc.includes(search)
+    const matchSearch = !search || s.name.includes(search) || (s.desc || '').includes(search)
     return matchCat && matchSearch
   })
 
-  const featured = allSkills.filter(s => ['pm-assistant', 'competitive-analysis', 'decision-framework', 'knowledge-extractor'].includes(s.id))
+  const coreSkills = allSkills.filter(s => CORE_IDS.includes(s.id) && !installedIds.includes(s.id))
+  const contextosSkills = allSkills.filter(s => CONTEXTOS_IDS.includes(s.id) && !installedIds.includes(s.id))
+  const moreSkills = allSkills.filter(s =>
+    !CORE_IDS.includes(s.id) && !CONTEXTOS_IDS.includes(s.id) && !installedIds.includes(s.id) && !skillhubSkills.find(h => h.id === s.id)
+  )
 
   async function handleToggleInstall(skill, e) {
     e?.stopPropagation()
@@ -70,573 +73,409 @@ export default function SkillsPage() {
       setInstallingId(skill.id)
       await installSkillFull(skill)
       await loadInstalled()
-      // Brief visual feedback before clearing
       await new Promise(r => setTimeout(r, 600))
       setInstallingId(null)
     }
   }
 
+  const categoryCounts = SKILL_CATEGORIES.reduce((acc, cat) => {
+    acc[cat] = cat === '全部' ? allSkills.length : allSkills.filter(s => s.category === cat).length
+    return acc
+  }, {})
+
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>
-      {/* Sidebar */}
-      <aside style={{
-        width: 220, minWidth: 220,
-        background: window.electronAPI ? 'transparent' : 'var(--bg-surface)',
-        borderRight: '1px solid var(--border)',
-        display: 'flex', flexDirection: 'column', padding: '18px 0',
-        WebkitAppRegion: 'drag',
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)', position: 'relative', zIndex: 1 }}>
+
+      {/* 标题栏 */}
+      <div style={{
+        height: 50, background: 'var(--bg-titlebar)', backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)', borderBottom: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', padding: '0 16px',
+        flexShrink: 0, position: 'relative', WebkitAppRegion: 'drag',
       }}>
-        <div style={{ padding: '0 18px 24px', display: 'flex', alignItems: 'center', gap: 9, paddingTop: window.electronAPI ? 44 : undefined, WebkitAppRegion: 'no-drag' }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 7,
-            background: 'var(--accent)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            border: '1px solid var(--accent-border)',
-          }}>
-            <span style={{ color: 'white', fontSize: 13, fontWeight: 700 }}>C</span>
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-            Context<span style={{ color: 'var(--accent)' }}>OS</span>
-          </div>
-        </div>
-
-        <nav style={{ padding: '0 10px', flex: 1, WebkitAppRegion: 'no-drag' }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', padding: '0 8px', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            {t('nav.workbench')}
-          </div>
-          <NavItem icon={<LayoutDashboard size={15} />} label={t('nav.overview')} onClick={() => navigate('/')} />
-          <NavItem icon={<FolderOpen size={15} />} label={t('nav.projects')} onClick={() => navigate('/')} />
-          <NavItem icon={<MessageSquare size={15} />} label={t('nav.conversations')} onClick={() => navigate('/')} />
-          <NavItem icon={<Sparkles size={15} />} label={t('nav.skills')} active />
-          <NavItem icon={<Plug size={15} />} label={t('nav.mcp')} onClick={() => navigate('/mcp')} />
-        </nav>
-
-        <div style={{ padding: '10px 10px 0', borderTop: '1px solid var(--border)', WebkitAppRegion: 'no-drag' }}>
-          <div
-            onClick={() => setShowSettings(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', transition: 'background 0.15s' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <div style={{
-              width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-              background: 'linear-gradient(135deg, var(--accent), var(--teal))',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 11, fontWeight: 700, color: 'white',
-              border: '1px solid var(--accent-border)',
-            }}>
-              {displayName.charAt(0).toUpperCase() || 'U'}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{displayRole}</div>
-            </div>
-            <Settings size={13} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-          </div>
-        </div>
-      </aside>
-
-      {/* Main */}
-      <main style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-base)' }}>
-        {/* Hero search bar */}
+        <div style={{ width: isElectron ? 72 : 4, flexShrink: 0, WebkitAppRegion: 'no-drag' }} />
         <div style={{
-          background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)',
-          padding: '28px 40px 20px',
+          position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+          fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700,
+          color: 'var(--text-primary)', letterSpacing: '-0.01em',
+          WebkitAppRegion: 'no-drag',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div>
-              <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.02em' }}>
-                {t('skills.pageTitle')}
-              </h1>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
-                {t('skills.availableCount', { total: allSkills.length, installed: installedIds.length })}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {['market', 'installed'].map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  style={{
-                    padding: '6px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                    cursor: 'pointer', border: activeTab === tab ? 'none' : '1px solid var(--border)',
-                    background: activeTab === tab ? 'var(--accent)' : 'var(--bg-card)',
-                    color: activeTab === tab ? 'white' : 'var(--text-secondary)',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {tab === 'market' ? t('skills.market') : t('skills.installedCount', { count: installedIds.length })}
-                </button>
-              ))}
-            </div>
-          </div>
+          ContextOS
+        </div>
+      </div>
 
-          {/* Search */}
+      {/* 主体 */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+        {/* Rail */}
+        <AppRail activePage="skills" navigate={navigate} onAvatarClick={() => setShowSettings(true)} displayName={displayName} />
+
+        {/* 内容区 */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+          {/* 顶部工具栏 */}
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            background: 'var(--bg-base)', border: '1px solid var(--border)',
-            borderRadius: 10, padding: '9px 14px',
-            transition: 'border-color 0.15s',
-          }}
-            onFocusCapture={e => { e.currentTarget.style.borderColor = 'var(--accent)' }}
-            onBlurCapture={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
-          >
-            <Search size={14} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={t('skills.searchPlaceholder')}
-              style={{
-                flex: 1, border: 'none', outline: 'none', background: 'transparent',
-                fontSize: 13, color: 'var(--text-primary)', fontFamily: 'inherit',
-              }}
-            />
-            {search && (
-              <button
-                onClick={() => setSearch('')}
-                style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, fontSize: 13 }}
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div style={{ padding: '24px 40px' }}>
-          {/* installed tab */}
-          {activeTab === 'installed' && (
-            <InstalledTab
-              skills={installedSkills}
-              onUninstall={async (skill) => { await uninstallSkillFull(skill.id); await loadInstalled() }}
-            />
-          )}
-
-          {activeTab === 'market' && <>
-          {/* SkillHub community skills (shown when loading or results available) */}
-          {(skillhubLoading || skillhubSkills.length > 0) && (
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                <Cloud size={14} color="var(--accent)" />
-                <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{t('skills.skillhubCommunity')}</h2>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                {skillhubLoading && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('skills.loading')}</span>}
+            padding: '16px 28px 0',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            flexShrink: 0,
+          }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                技能库
               </div>
-              {skillhubSkills.length > 0 && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-                  {skillhubSkills.slice(0, 8).map(skill => (
-                    <FeaturedCard key={skill.id} skill={skill} installed={installedIds.includes(skill.id)}
-                      installing={installingId === skill.id}
-                      onSelect={setSelectedSkill} onToggle={handleToggleInstall} />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Featured (always shown) */}
-          {!search && (
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                <Zap size={14} color="#d97706" />
-                <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{t('skills.featured')}</h2>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-                {featured.map(skill => (
-                  <FeaturedCard key={skill.id} skill={skill} installed={installedIds.includes(skill.id)}
-                    installing={installingId === skill.id}
-                    onSelect={setSelectedSkill} onToggle={handleToggleInstall} />
-                ))}
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                为项目安装专属能力增强器，技能附着在项目上全局生效
               </div>
             </div>
-          )}
-
-          {/* Category tabs + grid */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                {search ? t('skills.searchResults', { count: filtered.length }) : t('skills.allSkills')}
-              </h2>
-              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-            </div>
-
-            {/* Category pills */}
-            {!search && (
-              <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-                {SKILL_CATEGORIES.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setActiveCategory(cat)}
-                    style={{
-                      padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500,
-                      cursor: 'pointer', transition: 'all 0.15s',
-                      border: activeCategory === cat ? 'none' : '1px solid var(--border)',
-                      background: activeCategory === cat ? 'var(--accent)' : 'var(--bg-card)',
-                      color: activeCategory === cat ? 'white' : 'var(--text-secondary)',
-                    }}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {filtered.length === 0 ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {/* 搜索框 */}
               <div style={{
-                textAlign: 'center', padding: '48px 0',
-                background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)',
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: 8, padding: '6px 10px', minWidth: 180, cursor: 'text',
               }}>
-                <Search size={24} color="var(--text-muted)" style={{ margin: '0 auto 10px' }} />
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('skills.noResults')}</div>
+                <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>⌕</span>
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="搜索技能…"
+                  style={{
+                    flex: 1, border: 'none', outline: 'none', background: 'transparent',
+                    fontSize: 12, color: 'var(--text-primary)', fontFamily: 'var(--font-body)',
+                  }}
+                />
+                {search && (
+                  <button onClick={() => setSearch('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, fontSize: 11 }}>✕</button>
+                )}
               </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-                {filtered.map(skill => (
-                  <SkillCard
-                    key={skill.id}
-                    skill={skill}
-                    installed={installedIds.includes(skill.id)}
-                    installing={installingId === skill.id}
-                    onSelect={setSelectedSkill}
-                    onToggle={handleToggleInstall}
-                  />
+              {/* 筛选 tabs */}
+              <div style={{
+                display: 'flex', gap: 2, background: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: 8, padding: 3,
+              }}>
+                {[{ key: 'all', label: '全部' }, { key: 'installed', label: '已安装' }].map(tab => (
+                  <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
+                    padding: '4px 10px', borderRadius: 5,
+                    fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600,
+                    color: activeTab === tab.key ? 'var(--text-primary)' : 'var(--text-muted)',
+                    background: activeTab === tab.key ? 'var(--bg-hover)' : 'transparent',
+                    border: 'none', cursor: 'pointer',
+                  }}>{tab.label}</button>
                 ))}
               </div>
-            )}
+            </div>
           </div>
-          </>}
+
+          {/* 分类导航 */}
+          <div style={{
+            display: 'flex', gap: 6, padding: '14px 28px 0',
+            flexShrink: 0, overflowX: 'auto',
+          }}>
+            {SKILL_CATEGORIES.filter(c => (categoryCounts[c] || 0) > 0 || c === '全部').map(cat => (
+              <button key={cat} onClick={() => setActiveCategory(cat)} style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '5px 12px', borderRadius: 20,
+                border: '1px solid', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600,
+                transition: 'all 0.12s',
+                borderColor: activeCategory === cat ? 'var(--accent-border)' : 'var(--border)',
+                background: activeCategory === cat ? 'var(--accent-dim)' : 'transparent',
+                color: activeCategory === cat ? 'var(--accent-raw)' : 'var(--text-secondary)',
+              }}>
+                {cat}
+                {categoryCounts[cat] > 0 && (
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 400, opacity: 0.6 }}>
+                    {categoryCounts[cat]}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* 内容滚动区 */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 28px 24px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+            {/* 已安装 tab */}
+            {activeTab === 'installed' && (
+              installedSkills.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)', fontSize: 13 }}>
+                  <div style={{ fontSize: 28, marginBottom: 10 }}>📦</div>
+                  <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, marginBottom: 4, color: 'var(--text-secondary)' }}>还没有安装的技能</div>
+                  <div>在市场中找到合适的技能，点击安装即可</div>
+                </div>
+              ) : (
+                <div>
+                  <SectionHeader title="已安装" />
+                  <InstalledList
+                    skills={installedSkills}
+                    onUninstall={s => handleToggleInstall(s)}
+                    onUse={() => navigate('/')}
+                  />
+                </div>
+              )
+            )}
+
+            {/* 全部 tab */}
+            {activeTab === 'all' && (
+              search || activeCategory !== '全部' ? (
+                /* 搜索 / 分类过滤模式 */
+                <div>
+                  <SectionHeader title={search ? `搜索结果 · ${filtered.length} 个` : `${activeCategory}`} />
+                  {filtered.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: 13 }}>
+                      未找到匹配的技能
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                      {filtered.map(s => (
+                        <StoreCard key={s.id} skill={s} installed={installedIds.includes(s.id)}
+                          installing={installingId === s.id} onToggle={handleToggleInstall}
+                          featured={CORE_IDS.slice(0, 2).includes(s.id)} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* 全量分区模式 */
+                <>
+                  {/* 已安装区 */}
+                  {installedSkills.length > 0 && (
+                    <div>
+                      <SectionHeader title="已安装" />
+                      <InstalledList
+                        skills={installedSkills}
+                        onUninstall={s => handleToggleInstall(s)}
+                        onUse={() => navigate('/')}
+                      />
+                    </div>
+                  )}
+
+                  {/* 核心技能 */}
+                  {coreSkills.length > 0 && (
+                    <div>
+                      <SectionHeader title="核心技能 · 知识工作者必备" />
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                        {coreSkills.map(s => (
+                          <StoreCard key={s.id} skill={s} installed={false}
+                            installing={installingId === s.id} onToggle={handleToggleInstall}
+                            featured={['competitive-analysis', 'pm-assistant'].includes(s.id)} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ContextOS 专属 */}
+                  {contextosSkills.length > 0 && (
+                    <div>
+                      <SectionHeader title="ContextOS 专属" />
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                        {contextosSkills.map(s => (
+                          <StoreCard key={s.id} skill={s} installed={false}
+                            installing={installingId === s.id} onToggle={handleToggleInstall}
+                            featured />
+                        ))}
+                        {/* 即将上线占位 */}
+                        <div style={{
+                          background: 'var(--bg-card)', border: '1px solid var(--border)',
+                          borderRadius: 12, padding: 16, opacity: 0.7,
+                          display: 'flex', flexDirection: 'column', gap: 10,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                            <div style={{ width: 36, height: 36, borderRadius: 9, background: 'var(--bg-hover)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🔬</div>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 600, padding: '2px 5px', borderRadius: 3, background: 'rgba(126,134,158,0.08)', border: '1px solid rgba(126,134,158,0.2)', color: 'var(--text-muted)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>即将上线</span>
+                          </div>
+                          <div>
+                            <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>意图识别器</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>自动判断对话意图，智能决定注入多少上下文。</div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>ContextOS · 意图感知</span>
+                            <button disabled style={{ padding: '5px 12px', borderRadius: 6, fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'default' }}>敬请期待</button>
+                          </div>
+                        </div>
+                        {/* 自定义技能 */}
+                        <div
+                          style={{
+                            background: 'transparent', border: '1px dashed var(--border)',
+                            borderRadius: 12, padding: 16,
+                            display: 'flex', alignItems: 'center', gap: 12,
+                            cursor: 'pointer', transition: 'all 0.15s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.background = 'var(--accent-glow)' }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'transparent' }}
+                        >
+                          <div style={{ width: 36, height: 36, borderRadius: 9, border: '1px dashed var(--border)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>+</div>
+                          <div>
+                            <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 2 }}>创建自定义技能</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', opacity: 0.7 }}>编写 system prompt，定义专属 AI 角色</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 更多技能 */}
+                  {moreSkills.length > 0 && (
+                    <div>
+                      <SectionHeader title="更多技能" />
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                        {moreSkills.map(s => (
+                          <StoreCard key={s.id} skill={s} installed={false}
+                            installing={installingId === s.id} onToggle={handleToggleInstall} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SkillHub 社区技能 */}
+                  {skillhubSkills.filter(s => !installedIds.includes(s.id)).length > 0 && (
+                    <div>
+                      <SectionHeader title="SkillHub 社区" />
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                        {skillhubSkills.filter(s => !installedIds.includes(s.id)).slice(0, 6).map(s => (
+                          <StoreCard key={s.id} skill={s} installed={false}
+                            installing={installingId === s.id} onToggle={handleToggleInstall} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )
+            )}
+
+          </div>
         </div>
-      </main>
+      </div>
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
-      {selectedSkill && (
-        <SkillDetailModal
-          skill={selectedSkill}
-          installed={installedIds.includes(selectedSkill.id)}
-          onClose={() => setSelectedSkill(null)}
-          onToggle={() => { handleToggleInstall(selectedSkill); }}
-        />
-      )}
     </div>
   )
 }
 
-function FeaturedCard({ skill, installed, installing, onSelect, onToggle }) {
-  const { t } = useTranslation()
+
+function SectionHeader({ title }) {
   return (
-    <div
-      onClick={() => onSelect(skill)}
-      style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: 12, padding: '16px',
-        cursor: 'pointer', transition: 'border-color 0.15s, background 0.15s',
-        display: 'flex', flexDirection: 'column', gap: 6,
-        position: 'relative',
-      }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.background = 'var(--bg-hover)' }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-card)' }}
-    >
-      <div style={{ fontSize: 26, marginBottom: 2 }}>{skill.icon}</div>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{skill.name}</div>
-      <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, flex: 1,
-        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-        {skill.desc}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+      <div style={{ fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+        {title}
       </div>
-      <button
-        onClick={e => onToggle(skill, e)}
-        disabled={installing}
-        style={{
-          position: 'absolute', top: 12, right: 12,
-          width: 26, height: 26, borderRadius: 6, border: 'none',
-          background: installed ? 'var(--accent-glow)' : 'rgba(255,255,255,0.8)',
-          color: installed ? 'var(--accent)' : 'var(--text-muted)',
-          cursor: installing ? 'default' : 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'all 0.15s',
-        }}
-        title={installed ? t('skills.uninstall') : t('skills.install')}
-      >
-        {installing
-          ? <span style={{ width: 10, height: 10, border: '1.5px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-          : installed ? <Check size={12} /> : <Download size={12} />
-        }
-      </button>
+      <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
     </div>
   )
 }
 
-function SkillCard({ skill, installed, installing, onSelect, onToggle }) {
-  const { t } = useTranslation()
+function InstalledList({ skills, onUninstall, onUse }) {
   return (
-    <div
-      onClick={() => onSelect(skill)}
-      style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: 14, padding: '20px 20px 16px',
-        display: 'flex', flexDirection: 'column', gap: 10,
-        transition: 'border-color 0.15s, background 0.15s', cursor: 'pointer',
-      }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.background = 'var(--bg-hover)' }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-card)' }}
-    >
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        <div style={{
-          width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-          background: 'var(--bg-hover)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 22, border: '1px solid var(--border)',
-        }}>
-          {skill.icon}
-        </div>
-        <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
-            {skill.name}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {skills.map(skill => (
+        <div key={skill.id} style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '10px 12px', borderRadius: 9,
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          transition: 'all 0.12s', cursor: 'default',
+        }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.background = 'var(--bg-hover)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-card)' }}
+        >
+          <div style={{
+            width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 14, background: 'var(--bg-hover)', border: '1px solid var(--border)',
+          }}>
+            {skill.icon}
           </div>
-          <span style={{
-            fontSize: 10, padding: '2px 8px', borderRadius: 10,
-            background: 'var(--bg-hover)', color: 'var(--text-secondary)',
-            fontWeight: 600, border: '1px solid var(--border)',
-            display: 'inline-block',
-          }}>
-            {skill.category}
-          </span>
-          {skill.source === 'skillhub' && (
-            <span style={{
-              fontSize: 9, padding: '2px 6px', borderRadius: 10, marginLeft: 4,
-              background: 'var(--accent-glow)', color: 'var(--accent)',
-              fontWeight: 600, border: '1px solid var(--border)',
-              display: 'inline-block',
-            }}>
-              SkillHub
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Desc */}
-      <div style={{
-        fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.65, flex: 1,
-        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-      }}>
-        {skill.desc}
-      </div>
-
-      {/* Actions */}
-      <button
-        onClick={e => { e.stopPropagation(); onToggle(skill, e) }}
-        disabled={installing}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-          padding: '8px 0', borderRadius: 9, fontSize: 12.5, fontWeight: 600,
-          cursor: installing ? 'default' : 'pointer', transition: 'all 0.15s', marginTop: 2,
-          border: installed ? '1px solid var(--accent-border)' : '1px solid var(--border)',
-          background: installed ? 'var(--accent-light)' : 'var(--bg-card)',
-          color: installed ? 'var(--accent)' : 'var(--text-secondary)',
-        }}
-      >
-        {installing
-          ? <><span style={{ width: 11, height: 11, border: '1.5px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> {t('skills.configuring')}</>
-          : installed ? <><Check size={13} /> {t('skills.installedToMarket')}</> : <><Download size={13} /> {t('skills.installToMarket')}</>
-        }
-      </button>
-      {installed && (
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', marginTop: 5 }}>
-          {t('skills.installNote')}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function InstalledTab({ skills, onUninstall }) {
-  const { t } = useTranslation()
-  if (skills.length === 0) {
-    return (
-      <div style={{ textAlign: 'center', padding: '60px 0' }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>📦</div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>{t('skills.noInstalled')}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('skills.noInstalledDesc')}</div>
-      </div>
-    )
-  }
-  return (
-    <div>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        fontSize: 12, color: 'var(--text-muted)', marginBottom: 16,
-        background: 'var(--bg-card)', border: '1px solid var(--border)',
-        borderRadius: 8, padding: '8px 12px',
-      }}>
-        <span style={{ fontSize: 14 }}>💡</span>
-        {t('skills.installedTabNote', { count: skills.length })}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-        {skills.map(skill => (
-          <div key={skill.id} style={{
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 14, padding: '20px 20px 16px',
-            display: 'flex', flexDirection: 'column', gap: 10,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-              <div style={{
-                width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-                background: 'var(--bg-hover)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 22, border: '1px solid var(--border)',
-              }}>
-                {skill.icon}
-              </div>
-              <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{skill.name}</div>
-                <span style={{
-                  fontSize: 10, padding: '2px 8px', borderRadius: 10,
-                  background: 'var(--bg-hover)', color: 'var(--text-secondary)',
-                  fontWeight: 600, border: '1px solid var(--border)', display: 'inline-block',
-                }}>{skill.category}</span>
-                {skill.source === 'skillhub' && (
-                  <span style={{
-                    fontSize: 9, padding: '2px 6px', borderRadius: 10, marginLeft: 4,
-                    background: 'var(--accent-glow)', color: 'var(--accent)',
-                    fontWeight: 600, border: '1px solid var(--border)', display: 'inline-block',
-                  }}>SkillHub</span>
-                )}
-              </div>
-            </div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-              {skill.desc}
-            </div>
-            <button
-              onClick={() => onUninstall(skill)}
-              title={t('skills.uninstall')}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                padding: '7px 0', borderRadius: 9, fontSize: 12, fontWeight: 500,
-                cursor: 'pointer', transition: 'all 0.15s', marginTop: 2,
-                border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.borderColor = 'var(--red)' }}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 1 }}>{skill.name}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{skill.desc}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <button onClick={onUse} style={{
+              padding: '6px 12px', borderRadius: 6,
+              fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600,
+              color: 'var(--accent-raw)', borderColor: 'var(--accent-border)',
+              background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+              cursor: 'pointer', transition: 'all 0.12s',
+            }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(61,142,245,0.18)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'var(--accent-dim)'}
+            >使用</button>
+            <button onClick={() => onUninstall(skill)} style={{
+              padding: '6px 12px', borderRadius: 6,
+              fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600,
+              color: 'var(--text-muted)', border: '1px solid var(--border)',
+              background: 'transparent', cursor: 'pointer', transition: 'all 0.12s',
+            }}
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.borderColor = 'rgba(248,113,113,0.3)' }}
               onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)' }}
-            >
-              <Trash2 size={12} /> {t('skills.uninstall')}
-            </button>
+            >卸载</button>
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   )
 }
 
-function SkillDetailModal({ skill, installed, onClose, onToggle }) {
-  const { t } = useTranslation()
+function StoreCard({ skill, installed, installing, onToggle, featured = false }) {
+  const badge = BADGE_MAP[skill.id]
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 200,
-      background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-    }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{
-        background: 'var(--bg-surface)', border: '1px solid var(--border)',
-        borderRadius: 20, width: 480, maxWidth: '90vw',
-        boxShadow: 'var(--shadow-lg)', overflow: 'hidden',
-      }}>
-        {/* Header */}
-        <div style={{ padding: '24px 24px 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{
-              width: 52, height: 52, borderRadius: 14, flexShrink: 0,
-              background: 'var(--bg-hover)',
-              border: '1px solid var(--border)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26,
-            }}>{skill.icon}</div>
-            <div>
-              <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{skill.name}</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {skill.category && (
-                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'var(--bg-hover)', color: 'var(--text-secondary)', fontWeight: 600, border: '1px solid var(--border)' }}>
-                    {skill.category}
-                  </span>
-                )}
-                {skill.source === 'skillhub' && (
-                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'var(--accent-glow)', color: 'var(--accent)', fontWeight: 600, border: '1px solid var(--border)' }}>
-                    SkillHub
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, marginTop: -4 }}>
-            <X size={18} />
-          </button>
+      background: featured ? 'linear-gradient(135deg, rgba(61,142,245,0.04) 0%, var(--bg-card) 60%)' : 'var(--bg-card)',
+      border: '1px solid', borderColor: featured ? 'var(--accent-border)' : 'var(--border)',
+      borderRadius: 12, padding: 16, cursor: 'default',
+      display: 'flex', flexDirection: 'column', gap: 10,
+      position: 'relative', overflow: 'hidden', transition: 'all 0.15s',
+    }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.2)'; e.currentTarget.style.borderColor = featured ? 'var(--accent-border)' : 'var(--border-strong)'; e.currentTarget.style.background = featured ? 'linear-gradient(135deg, rgba(61,142,245,0.06) 0%, var(--bg-hover) 60%)' : 'var(--bg-hover)' }}
+      onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = featured ? 'var(--accent-border)' : 'var(--border)'; e.currentTarget.style.background = featured ? 'linear-gradient(135deg, rgba(61,142,245,0.04) 0%, var(--bg-card) 60%)' : 'var(--bg-card)' }}
+    >
+      {featured && (
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: 'linear-gradient(90deg, transparent, var(--accent-raw), transparent)' }} />
+      )}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div style={{ width: 36, height: 36, borderRadius: 9, background: 'var(--bg-hover)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
+          {skill.icon}
         </div>
-
-        {/* Body */}
-        <div style={{ padding: '16px 24px 24px' }}>
-          <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.75, margin: '0 0 16px' }}>
-            {skill.fullDesc || skill.desc}
-          </p>
-
-          {skill.systemPrompt && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{t('skills.aiRole')}</div>
-              <div style={{
-                background: 'var(--bg-card)', border: '1px solid var(--border)',
-                borderRadius: 10, padding: '10px 14px',
-                fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6,
-                maxHeight: 80, overflow: 'hidden',
-                display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
-              }}>
-                {skill.systemPrompt}
-              </div>
-            </div>
-          )}
-
-          {/* Actions */}
-          <button
-            onClick={() => { onToggle(); }}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-              padding: '11px 0', borderRadius: 10, fontSize: 13.5, fontWeight: 600,
-              cursor: 'pointer', transition: 'all 0.15s',
-              border: installed ? '1px solid var(--accent-border)' : 'none',
-              background: installed ? 'var(--accent-light)' : 'var(--accent)',
-              color: installed ? 'var(--accent)' : 'white',
-            }}
-          >
-            {installed ? <><Check size={15} /> {t('skills.installedToMarket')}</> : <><Download size={15} /> {t('skills.installToMarket')}</>}
-          </button>
-          {installed && (
-            <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-muted)', textAlign: 'center' }}>
-              {t('skills.installedNote')}
-            </div>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          {badge && (
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 600,
+              padding: '2px 5px', borderRadius: 3, letterSpacing: '0.04em', textTransform: 'uppercase',
+              background: badge.bg, border: `1px solid ${badge.border}`, color: badge.color,
+            }}>{badge.label}</span>
           )}
         </div>
       </div>
-    </div>
-  )
-}
-
-function NavItem({ icon, label, active, onClick }) {
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 9,
-        padding: '7px 8px', borderRadius: 7,
-        cursor: onClick ? 'pointer' : 'default',
-        fontSize: 13, marginBottom: 2,
-        transition: 'background 0.15s, color 0.15s',
-        color: active ? 'var(--accent)' : 'var(--text-secondary)',
-        background: active ? 'var(--accent-glow)' : 'transparent',
-        fontWeight: active ? 600 : 400,
-      }}
-      onMouseEnter={e => { if (!active && onClick) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' } }}
-      onMouseLeave={e => { if (!active && onClick) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)' } }}
-    >
-      <span style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>{icon}</span>
-      <span style={{ flex: 1 }}>{label}</span>
+      <div>
+        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{skill.name}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{skill.desc}</div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>
+          {skill.category}{skill.source === 'skillhub' ? ' · SkillHub' : ''}
+        </span>
+        {installed ? (
+          <button disabled style={{ padding: '5px 12px', borderRadius: 6, fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'default' }}>已安装</button>
+        ) : (
+          <button
+            onClick={e => onToggle(skill, e)}
+            disabled={installing}
+            style={{
+              padding: '5px 12px', borderRadius: 6,
+              fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600,
+              background: 'var(--accent-dim)', border: '1px solid var(--accent-border)',
+              color: 'var(--accent-raw)', cursor: installing ? 'default' : 'pointer',
+              transition: 'all 0.12s', display: 'flex', alignItems: 'center', gap: 5,
+            }}
+            onMouseEnter={e => { if (!installing) e.currentTarget.style.background = 'rgba(61,142,245,0.18)' }}
+            onMouseLeave={e => e.currentTarget.style.background = 'var(--accent-dim)'}
+          >
+            {installing
+              ? <span style={{ width: 10, height: 10, border: '1.5px solid var(--accent-raw)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+              : '安装'
+            }
+          </button>
+        )}
+      </div>
     </div>
   )
 }

@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
-import { GitBranch, Network, FileText, Upload, FileArchive, Sparkles, Brain, X, Download } from 'lucide-react'
+import { GitBranch, Network, FileText, Upload, FileArchive, Sparkles, Brain, X, Download, BarChart2 } from 'lucide-react'
 import MarkmapViewer from './MarkmapViewer'
 import { useTranslation } from 'react-i18next'
 import i18n from '../i18n'
 
 const FILE_ICONS = {
-  flowchart: { Icon: GitBranch, color: 'var(--accent)', bg: 'var(--accent-glow)' },
-  mindmap:   { Icon: Network,    color: '#0891b2', bg: 'rgba(8,145,178,0.08)' },
-  document:  { Icon: FileText,   color: 'var(--green)', bg: 'var(--green-bg)' },
-  upload:    { Icon: Upload,     color: 'var(--accent)', bg: 'var(--accent-glow)' },
-  pdf:       { Icon: FileArchive, color: 'var(--red)', bg: 'var(--red-bg)' },
+  flowchart: { Icon: GitBranch,  color: 'var(--accent)',  bg: 'var(--accent-glow)' },
+  mindmap:   { Icon: Network,    color: '#0891b2',        bg: 'rgba(8,145,178,0.08)' },
+  document:  { Icon: FileText,   color: 'var(--green)',   bg: 'var(--green-bg)' },
+  gantt:     { Icon: BarChart2,  color: 'var(--amber)',   bg: 'rgba(251,191,36,0.08)' },
+  upload:    { Icon: Upload,     color: 'var(--accent)',  bg: 'var(--accent-glow)' },
+  pdf:       { Icon: FileArchive, color: 'var(--red)',    bg: 'var(--red-bg)' },
 }
 
 export default function FilePanel({ project, files, messages = [], tokenPercent = 0, onGenerateSummary, onSummaryEdit, onKnowledgeEdit, onConsolidateKnowledge, onClose, memory, reflectionRunning, onMemoryEdit, onReflect }) {
@@ -26,17 +27,18 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
 
   const aiOutputs = files.filter(f => f.source === 'ai')
   const uploads = files.filter(f => f.source === 'upload')
-  const knowledgeCount = project?.knowledge
-    ? project.knowledge.split('\n').filter(l => l.trim()).length
-    : 0
+  const knowledgeItems = Array.isArray(project?.knowledge) ? project.knowledge : []
+  const knowledgeCount = knowledgeItems.length
 
   function handleExport() {
     const lines = [`# ${project?.name || project?.name || ''}\n`]
     if (project?.status) {
       lines.push(`${t('filePanel.exportPrefix')}${project.status}\n`)
     }
-    if (project?.knowledge) {
-      lines.push(`${t('filePanel.exportKnowledge')}${project.knowledge}\n`)
+    if (knowledgeItems.length > 0) {
+      lines.push(`${t('filePanel.exportKnowledge')}`)
+      knowledgeItems.forEach(k => { lines.push(`- [${k.date || ''}] ${k.content}`) })
+      lines.push('')
     }
     if (messages.length > 0) {
       lines.push(`${t('filePanel.exportHistory')}\n`)
@@ -57,18 +59,16 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
   }
 
   function handleDeleteKnowledge(idx) {
-    const lines = (project?.knowledge || '').split('\n').filter(l => l.trim())
-    lines.splice(idx, 1)
-    onKnowledgeEdit?.(lines.join('\n'))
+    const updated = knowledgeItems.filter((_, i) => i !== idx)
+    onKnowledgeEdit?.(updated)
   }
 
   function handleAddKnowledge() {
     const text = newKnowledge.trim()
     if (!text) return
-    const today = new Date().toLocaleDateString(i18n.language === 'zh' ? 'zh-CN' : undefined, { month: 'long', day: 'numeric' })
-    const entry = `- [${today}] ${text}`
-    const existing = project?.knowledge || ''
-    onKnowledgeEdit?.(existing ? existing + '\n' + entry : entry)
+    const today = new Date().toLocaleDateString('zh-CN')
+    const entry = { id: crypto.randomUUID(), content: text, date: today, type: 'conclusion' }
+    onKnowledgeEdit?.([...knowledgeItems, entry])
     setNewKnowledge('')
     setAddingKnowledge(false)
   }
@@ -104,7 +104,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
           <button
             onClick={handleExport}
             title={t('filePanel.exportTooltip')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center', transition: 'color 0.15s' }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 6, borderRadius: 6, display: 'flex', alignItems: 'center', transition: 'color 0.15s' }}
             onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
             onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
           >
@@ -200,13 +200,13 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
                   <div style={{ display: 'flex', gap: 6 }}>
                     {!editingSummary && onSummaryEdit && (
                       <button onClick={() => { setSummaryDraft(project?.status || project?.summary || ''); setEditingSummary(true) }}
-                        style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-muted)', fontWeight: 500 }}>
+                        style={{ fontSize: 11, padding: '5px 10px', borderRadius: 6, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-muted)', fontWeight: 500 }}>
                         {t('filePanel.edit')}
                       </button>
                     )}
                     {onGenerateSummary && (
                       <button onClick={handleGenerateSummary} disabled={summaryLoading || messages.length < 2}
-                        style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: summaryLoading || messages.length < 2 ? 'default' : 'pointer', border: '1px solid var(--border)', background: 'var(--bg-card)', color: summaryLoading || messages.length < 2 ? 'var(--text-muted)' : 'var(--accent)', fontWeight: 500 }}>
+                        style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '5px 10px', borderRadius: 6, cursor: summaryLoading || messages.length < 2 ? 'default' : 'pointer', border: '1px solid var(--border)', background: 'var(--bg-card)', color: summaryLoading || messages.length < 2 ? 'var(--text-muted)' : 'var(--accent)', fontWeight: 500 }}>
                         <Sparkles size={11} />
                         {summaryLoading ? t('filePanel.aiUpdating') : t('filePanel.aiUpdate')}
                       </button>
@@ -244,7 +244,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
                         try { await onConsolidateKnowledge() } finally { setConsolidating(false) }
                       }}
                       disabled={consolidating}
-                      style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, padding: '3px 8px', borderRadius: 6, cursor: consolidating ? 'default' : 'pointer', border: '1px solid var(--border)', background: 'var(--bg-card)', color: consolidating ? 'var(--text-muted)' : 'var(--accent)', fontWeight: 500 }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, padding: '5px 10px', borderRadius: 6, cursor: consolidating ? 'default' : 'pointer', border: '1px solid var(--border)', background: 'var(--bg-card)', color: consolidating ? 'var(--text-muted)' : 'var(--accent)', fontWeight: 500 }}
                       title={t('filePanel.consolidateTooltip')}
                     >
                       <Sparkles size={10} />
@@ -252,41 +252,36 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
                     </button>
                   )}
                 </div>
-                {project?.knowledge ? (
+                {knowledgeItems.length > 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {project.knowledge.split('\n').filter(l => l.trim()).map((line, i) => {
-                      const match = line.match(/^-?\s*\[([^\]]+)\]\s*(.+)$/)
-                      const date = match?.[1]
-                      const content = match ? match[2] : line.replace(/^-\s*/, '')
-                      return (
-                        <div key={i} style={{ padding: '8px 10px', borderRadius: 8, background: 'var(--bg-card)', border: '1px solid var(--border)', position: 'relative' }}
-                          className="knowledge-entry">
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                            <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1, opacity: 0.8 }}>💡</span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{content}</span>
-                              {date && (
-                                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>{date}</div>
-                              )}
-                            </div>
-                            <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-                              <button onClick={() => navigator.clipboard.writeText(content)}
-                                title={t('filePanel.copy')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: '2px 4px', borderRadius: 4 }}>
-                                {t('filePanel.copy')}
+                    {knowledgeItems.map((item, i) => (
+                      <div key={item.id || i} style={{ padding: '8px 10px', borderRadius: 8, background: 'var(--bg-card)', border: '1px solid var(--border)', position: 'relative' }}
+                        className="knowledge-entry">
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                          <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1, opacity: 0.8 }}>💡</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{item.content}</span>
+                            {item.date && (
+                              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>{item.date}</div>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                            <button onClick={() => navigator.clipboard.writeText(item.content)}
+                              title={t('filePanel.copy')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 10, padding: '4px 6px', borderRadius: 4 }}>
+                              {t('filePanel.copy')}
+                            </button>
+                            {onKnowledgeEdit && (
+                              <button onClick={() => handleDeleteKnowledge(i)}
+                                title={t('project.delete')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, padding: '4px 6px', borderRadius: 4, lineHeight: 1 }}
+                                onMouseEnter={e => e.currentTarget.style.color = 'var(--red)'}
+                                onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
+                                ×
                               </button>
-                              {onKnowledgeEdit && (
-                                <button onClick={() => handleDeleteKnowledge(i)}
-                                  title={t('project.delete')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, padding: '2px 4px', borderRadius: 4, lineHeight: 1 }}
-                                  onMouseEnter={e => e.currentTarget.style.color = 'var(--red)'}
-                                  onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
-                                  ×
-                                </button>
-                              )}
-                            </div>
+                            )}
                           </div>
                         </div>
-                      )
-                    })}
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '16px 4px', lineHeight: 1.7 }}>
@@ -357,21 +352,24 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
 function FilePreviewModal({ file, onClose }) {
   const { t } = useTranslation()
   const mermaidRef = useRef(null)
+  const isMermaid = file.type === 'flowchart' || file.type === 'gantt'
 
   useEffect(() => {
-    if (file.type === 'flowchart' && file.code && mermaidRef.current) {
-      let cancelled = false
-      import('../lib/mermaidInit').then(({ getMermaid }) => getMermaid()).then((mermaid) => {
-        const id = `fp-${file.id.slice(0, 8)}-${Date.now()}`
-        return mermaid.render(id, file.code)
-      }).then(({ svg }) => {
-        if (!cancelled && mermaidRef.current) mermaidRef.current.innerHTML = svg
-      }).catch(() => {
-        if (!cancelled && mermaidRef.current) mermaidRef.current.textContent = file.code
-      })
-      return () => { cancelled = true }
-    }
-  }, [file.id, file.code, file.type])
+    if (!isMermaid || !file.code || !mermaidRef.current) return
+    let cancelled = false
+    import('../lib/mermaidInit').then(({ getMermaid }) => getMermaid()).then((mermaid) => {
+      const id = `fp-${file.id.slice(0, 8)}-${Date.now()}`
+      return mermaid.render(id, file.code)
+    }).then(({ svg }) => {
+      if (cancelled || !mermaidRef.current) return
+      const host = mermaidRef.current
+      if (!host.shadowRoot) host.attachShadow({ mode: 'open' })
+      host.shadowRoot.innerHTML = `<style>:host{display:block}svg{max-width:100%;height:auto}</style>${svg}`
+    }).catch(() => {
+      if (!cancelled && mermaidRef.current) mermaidRef.current.textContent = file.code
+    })
+    return () => { cancelled = true }
+  }, [file.id, file.code, isMermaid])
 
   return (
     <div style={{
@@ -400,8 +398,8 @@ function FilePreviewModal({ file, onClose }) {
             <div style={{ height: 400 }}>
               <MarkmapViewer markdown={file.code} minHeight={400} />
             </div>
-          ) : file.type === 'flowchart' && file.code ? (
-            <div ref={mermaidRef} style={{ display: 'flex', justifyContent: 'center' }} />
+          ) : isMermaid && file.code ? (
+            <div ref={mermaidRef} style={{ display: 'flex', justifyContent: 'center', padding: 12 }} />
           ) : file.content ? (
             <pre style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>{file.content}</pre>
           ) : (

@@ -1,7 +1,7 @@
 import { openDB } from 'idb'
 
 const DB_NAME = 'contextos'
-const DB_VERSION = 4
+const DB_VERSION = 5
 
 let dbPromise = null
 
@@ -51,6 +51,27 @@ function getDB() {
             const p = cursor.value
             if (p.summary && !p.status) {
               cursor.update({ ...p, status: p.summary })
+            }
+            cursor.continue()
+          }
+        }
+
+        // v4 → v5 迁移：knowledge 字段从 string 升级为 JSON 数组
+        // 格式：[{ id, content, date, type: 'conclusion'|'method'|'decision' }]
+        if (oldVersion < 5 && db.objectStoreNames.contains('projects')) {
+          const store = transaction.objectStore('projects')
+          store.openCursor().onsuccess = (e) => {
+            const cursor = e.target.result
+            if (!cursor) return
+            const p = cursor.value
+            if (!Array.isArray(p.knowledge)) {
+              const existing = typeof p.knowledge === 'string' && p.knowledge.trim()
+              cursor.update({
+                ...p,
+                knowledge: existing
+                  ? [{ id: crypto.randomUUID(), content: p.knowledge.trim(), date: new Date().toLocaleDateString('zh-CN'), type: 'conclusion' }]
+                  : [],
+              })
             }
             cursor.continue()
           }
@@ -108,19 +129,19 @@ export async function updateProject(id, changes) {
 export async function archiveProject(id) {
   const db = await getDB()
   const proj = await db.get('projects', id)
-  if (proj) await db.put('projects', { ...proj, archived: true, status: 'archived', updatedAt: Date.now() })
+  if (proj) await db.put('projects', { ...proj, archived: true, updatedAt: Date.now() })
 }
 
 export async function getActiveProjects() {
   const db = await getDB()
   const items = await db.getAllFromIndex('projects', 'updatedAt')
-  return items.reverse().filter(p => !p.archived && p.status !== 'archived' && !p.isTemp)
+  return items.reverse().filter(p => !p.archived && !p.isTemp)
 }
 
 export async function getArchivedProjects() {
   const db = await getDB()
   const items = await db.getAllFromIndex('projects', 'updatedAt')
-  return items.reverse().filter(p => p.archived || p.status === 'archived')
+  return items.reverse().filter(p => p.archived)
 }
 
 // ── Messages ──────────────────────────────────────────────
@@ -196,6 +217,10 @@ export async function saveConversation(conv) {
 
 export async function deleteConversation(id) {
   const db = await getDB()
+  const msgs = await db.getAllFromIndex('messages', 'convId', id)
+  const tx = db.transaction('messages', 'readwrite')
+  await Promise.all(msgs.map(m => tx.store.delete(m.id)))
+  await tx.done
   await db.delete('conversations', id)
 }
 
@@ -223,6 +248,31 @@ export async function getWeeklyAICount() {
   const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000
   const all = await db.getAll('messages')
   return all.filter(m => m.role === 'assistant' && m.timestamp > cutoff).length
+}
+
+export async function getPrevWeekAICount() {
+  const db = await getDB()
+  const now = Date.now()
+  const start = now - 14 * 24 * 60 * 60 * 1000
+  const end = now - 7 * 24 * 60 * 60 * 1000
+  const all = await db.getAll('messages')
+  return all.filter(m => m.role === 'assistant' && m.timestamp > start && m.timestamp <= end).length
+}
+
+export async function getNewProjectsCount(dayLimit = 30) {
+  const db = await getDB()
+  const cutoff = Date.now() - dayLimit * 24 * 60 * 60 * 1000
+  const all = await db.getAll('projects')
+  return all.filter(p => !p.archived && !p.isTemp && p.createdAt > cutoff).length
+}
+
+export async function toggleProjectPin(projectId) {
+  const db = await getDB()
+  const project = await db.get('projects', projectId)
+  if (!project) return false
+  const pinned = !project.pinned
+  await db.put('projects', { ...project, pinned })
+  return pinned
 }
 
 export async function getTotalFilesCount() {
@@ -291,7 +341,7 @@ export async function getTodayActivity() {
   // 今日有更新的正式项目（排除 isTemp 和 archived）
   const allProjects = await db.getAllFromIndex('projects', 'updatedAt')
   const todayProjects = allProjects
-    .filter(p => !p.isTemp && !p.archived && p.status !== 'archived' && p.updatedAt >= cutoff)
+    .filter(p => !p.isTemp && !p.archived && p.updatedAt >= cutoff)
     .slice(0, 6)
 
   // 今日有更新的轻量对话

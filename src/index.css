@@ -1,196 +1,112 @@
-@import "tailwindcss";
-
 :root {
-  /* Backgrounds — v2 warm graphite */
-  --bg-base:    #111012;
-  --bg-surface: #1A1820;
-  --bg-card:    #201D26;
-  --bg-hover:   #2A2633;
-  --bg-input:   #0D0B10;
-  --bg-inset:   #0D0B10;
+  /* ── 背景层 ── */
+  --bg-base:       #080C12;
+  --bg-surface:    #0E1520;
+  --bg-card:       #131E2E;
+  --bg-hover:      #1A2840;
+  --bg-inset:      #060911;
 
-  /* Borders — solid hex, not rgba */
-  --border:        #2E2A38;
-  --border-strong: #3D3848;
+  /* ── 边框 ── */
+  --border:        #1E2D45;
+  --border-strong: #2A3F5E;
+  --border-glow:   rgba(61,142,245,0.3);
 
-  /* Accent — periwinkle violet: 主操作、当前激活、关键提醒 */
-  --accent:       #9D8EFF;
-  --accent-2:     #7060E8;
-  --accent-light:  rgba(157,142,255,0.12);
-  --accent-glow:   rgba(157,142,255,0.08);
-  --accent-border: rgba(157,142,255,0.28);
+  /* ── 文字 ── */
+  --text-primary:  #E4EDF8;
+  --text-secondary:#7B94B8;
+  --text-muted:    #3E5270;
+  --text-data:     #52779E;
 
-  /* Text */
-  --text-primary:   #F0EDF8;
-  --text-secondary: #8A869C;
-  --text-muted:     #5A5670;
+  /* ── 主色 · 蓝 ── */
+  --accent:        oklch(60% 0.19 240);
+  --accent-raw:    #3D8EF5;
+  --accent-dim:    rgba(61,142,245,0.10);
+  --accent-glow:   rgba(61,142,245,0.05);
+  --accent-border: rgba(61,142,245,0.22);
+  --accent-light:  rgba(61,142,245,0.10);
 
-  /* Semantic */
-  --green:        #34D399;
-  --green-bg:     rgba(52,211,153,0.07);
-  --green-border: rgba(52,211,153,0.20);
-  --amber:        #FBBF24;
-  --amber-bg:     rgba(251,191,36,0.07);
-  --amber-border: rgba(251,191,36,0.22);
-  --red:          #F87171;
-  --red-bg:       rgba(248,113,113,0.07);
-  --red-border:   rgba(248,113,113,0.20);
-  --blue:         #60A5FA;
+  /* ── 辅色 ── */
+  --cyan:          #22D3EE;
+  --cyan-dim:      rgba(34,211,238,0.08);
+  --cyan-border:   rgba(34,211,238,0.18);
+  --green:         #34D399;
+  --green-bg:      rgba(52,211,153,0.07);
+  --green-border:  rgba(52,211,153,0.20);
+  --amber:         #FBBF24;
+  --amber-bg:      rgba(251,191,36,0.07);
+  --amber-border:  rgba(251,191,36,0.22);
+  --red:           #F87171;
+  --red-bg:        rgba(248,113,113,0.07);
+  --red-border:    rgba(248,113,113,0.20);
+  --purple:        #A78BFA;
 
-  /* Teal — 上下文深度、索引进度、工具连接等系统状态 */
-  --teal:        #2DD4BF;
-  --teal-light:  rgba(45,212,191,0.10);
-  --teal-border: rgba(45,212,191,0.22);
+  /* ── 字体 ── */
+  --font-ui:   'Space Grotesk', -apple-system, 'PingFang SC', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', monospace;
+  --font-body: -apple-system, 'PingFang SC', system-ui, sans-serif;
+  /* 兼容旧引用 */
+  --font-sans: var(--font-body);
 
-  /* Cyan — 脑图、信息图表 */
-  --cyan:        #0891b2;
-  --cyan-bg:     rgba(8,145,178,0.07);
+  /* ── 代码块 ── */
+  --code-bg:   #060911;
+  --code-text: #C9D1E9;
 
-  /* Archive — 待处理、建议复盘、需要更新摘要等温和提醒 */
-  --archive:       #D6A24A;
-  --archive-light: rgba(214,162,74,0.12);
+  /* ── 浮层/面板背景 ── */
+  --bg-titlebar: rgba(14,21,32,0.88);
+  --bg-panel:    rgba(14,21,32,0.72);
 
-  /* Shadows — 暗色界面用 border 替代层次，box-shadow 只用于浮层 */
+  /* ── 阴影（仅浮层） ── */
   --shadow-sm: none;
   --shadow:    none;
   --shadow-lg: 0 0 0 1px var(--border), 0 8px 24px rgba(0,0,0,0.4);
-
-  /* Code block */
-  --code-bg:   #0D0B10;
-  --code-text: #C9D1E9;
-
-  /* Typography — 双命名兼容旧引用 */
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-  --font-sans: -apple-system, 'PingFang SC', 'SF Pro Display', 'Inter', system-ui, sans-serif;
-  --mono: var(--font-mono);
-  --sans: var(--font-sans);
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    /* Backgrounds */
-    --bg-base:    #F6F6FB;
-    --bg-surface: #FFFFFF;
-    --bg-card:    #FAFAFD;
-    --bg-hover:   #EFEFF8;
-    --bg-input:   #F2F2F8;
-    --bg-inset:   #F2F2F8;
-
-    /* Borders */
-    --border:        rgba(0,0,0,0.08);
-    --border-strong: rgba(0,0,0,0.15);
-
-    /* Accent */
-    --accent:       #7060E8;
-    --accent-2:     #5A4DD6;
-    --accent-light:  rgba(112,96,232,0.10);
-    --accent-glow:   rgba(112,96,232,0.07);
-    --accent-border: rgba(112,96,232,0.28);
-
-    /* Text */
-    --text-primary:   #0E0F1C;
-    --text-secondary: #525879;
-    --text-muted:     #9BA3C0;
-
-    /* Semantic */
-    --green:        #059669;
-    --green-bg:     rgba(5,150,105,0.07);
-    --green-border: rgba(5,150,105,0.20);
-    --amber:        #D97706;
-    --amber-bg:     rgba(217,119,6,0.07);
-    --amber-border: rgba(217,119,6,0.22);
-    --red:          #DC2626;
-    --red-bg:       rgba(220,38,38,0.06);
-    --red-border:   rgba(220,38,38,0.18);
-    --blue:         #2563EB;
-
-    /* Teal */
-    --teal-border: rgba(45,212,191,0.22);
-
-    /* Shadows — subtle on white */
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
-    --shadow:    0 4px 12px rgba(0,0,0,0.10);
-    --shadow-lg: 0 0 0 1px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.12);
-
-    /* Code block */
-    --code-bg:   #EDEDF8;
-    --code-text: #2C2F6B;
-  }
-}
-
-/* Explicit theme overrides — class-based specificity beats :root + media query */
-html.theme-dark {
-  --bg-base:    #111012;
-  --bg-surface: #1A1820;
-  --bg-card:    #201D26;
-  --bg-hover:   #2A2633;
-  --bg-input:   #0D0B10;
-  --bg-inset:   #0D0B10;
-  --border:        #2E2A38;
-  --border-strong: #3D3848;
-  --accent:       #9D8EFF;
-  --accent-2:     #7060E8;
-  --accent-light:  rgba(157,142,255,0.12);
-  --accent-glow:   rgba(157,142,255,0.08);
-  --accent-border: rgba(157,142,255,0.28);
-  --text-primary:   #F0EDF8;
-  --text-secondary: #8A869C;
-  --text-muted:     #5A5670;
-  --green:        #34D399;
-  --green-bg:     rgba(52,211,153,0.07);
-  --green-border: rgba(52,211,153,0.20);
-  --amber:        #FBBF24;
-  --amber-bg:     rgba(251,191,36,0.07);
-  --amber-border: rgba(251,191,36,0.22);
-  --red:          #F87171;
-  --red-bg:       rgba(248,113,113,0.07);
-  --red-border:   rgba(248,113,113,0.20);
-  --blue:         #60A5FA;
-  --teal:        #2DD4BF;
-  --teal-light:  rgba(45,212,191,0.10);
-  --teal-border: rgba(45,212,191,0.22);
-  --shadow-sm: none;
-  --shadow:    none;
-  --shadow-lg: 0 0 0 1px var(--border), 0 8px 24px rgba(0,0,0,0.4);
-  --code-bg:   #0D0B10;
-  --code-text: #C9D1E9;
-}
-
+/* ── 浅色主题覆盖 ── */
 html.theme-light {
-  --bg-base:    #F6F6FB;
-  --bg-surface: #FFFFFF;
-  --bg-card:    #FAFAFD;
-  --bg-hover:   #EFEFF8;
-  --bg-input:   #F2F2F8;
-  --bg-inset:   #F2F2F8;
+  --bg-base:       #F0F4FA;
+  --bg-surface:    #FFFFFF;
+  --bg-card:       #F7F9FC;
+  --bg-hover:      #EBF0F8;
+  --bg-inset:      #E4EAF4;
+
   --border:        rgba(0,0,0,0.08);
-  --border-strong: rgba(0,0,0,0.15);
-  --accent:       #7060E8;
-  --accent-2:     #5A4DD6;
-  --accent-light:  rgba(112,96,232,0.10);
-  --accent-glow:   rgba(112,96,232,0.07);
-  --accent-border: rgba(112,96,232,0.28);
-  --text-primary:   #0E0F1C;
-  --text-secondary: #525879;
-  --text-muted:     #9BA3C0;
-  --green:        #059669;
-  --green-bg:     rgba(5,150,105,0.07);
-  --green-border: rgba(5,150,105,0.20);
-  --amber:        #D97706;
-  --amber-bg:     rgba(217,119,6,0.07);
-  --amber-border: rgba(217,119,6,0.22);
-  --red:          #DC2626;
-  --red-bg:       rgba(220,38,38,0.06);
-  --red-border:   rgba(220,38,38,0.18);
-  --blue:         #2563EB;
-  --teal:        #2DD4BF;
-  --teal-light:  rgba(45,212,191,0.10);
-  --teal-border: rgba(45,212,191,0.22);
+  --border-strong: rgba(0,0,0,0.14);
+  --border-glow:   rgba(43,111,212,0.3);
+
+  --text-primary:  #0D1117;
+  --text-secondary:#3D4A5C;
+  --text-muted:    #7A8899;
+  --text-data:     #5A6E84;
+
+  --accent:        oklch(45% 0.19 240);
+  --accent-raw:    #2B6FD4;
+  --accent-dim:    rgba(43,111,212,0.10);
+  --accent-glow:   rgba(43,111,212,0.06);
+  --accent-border: rgba(43,111,212,0.25);
+  --accent-light:  rgba(43,111,212,0.10);
+
+  --cyan:          #0891B2;
+  --cyan-dim:      rgba(8,145,178,0.08);
+  --cyan-border:   rgba(8,145,178,0.20);
+  --green:         #059669;
+  --green-bg:      rgba(5,150,105,0.06);
+  --green-border:  rgba(5,150,105,0.18);
+  --amber:         #D97706;
+  --amber-bg:      rgba(217,119,6,0.06);
+  --amber-border:  rgba(217,119,6,0.20);
+  --red:           #DC2626;
+  --red-bg:        rgba(220,38,38,0.06);
+  --red-border:    rgba(220,38,38,0.18);
+
+  --code-bg:       #F0F4FA;
+  --code-text:     #1E2D45;
+
+  --bg-titlebar: rgba(255,255,255,0.88);
+  --bg-panel:    rgba(248,250,253,0.92);
+
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
-  --shadow:    0 4px 12px rgba(0,0,0,0.10);
-  --shadow-lg: 0 0 0 1px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.12);
-  --code-bg:   #EDEDF8;
-  --code-text: #2C2F6B;
+  --shadow:    0 2px 8px rgba(0,0,0,0.10);
+  --shadow-lg: 0 0 0 1px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.12);
 }
 
 *,
@@ -208,15 +124,42 @@ body,
 body {
   margin: 0;
   padding: 0;
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   background: var(--bg-base);
   color: var(--text-primary);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   line-height: 1.5;
+  font-size: 13px;
+}
+
+/* ── 点阵背景（全局） ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(61,142,245,0.07) 1px,
+    transparent 0
+  );
+  background-size: 28px 28px;
+}
+
+/* ── 右上角环境光（全局） ── */
+body::after {
+  content: '';
+  position: fixed; top: 0; right: 0; z-index: 0; pointer-events: none;
+  width: 700px; height: 500px;
+  background: radial-gradient(
+    ellipse at 100% 0%,
+    rgba(61,142,245,0.05) 0%,
+    transparent 65%
+  );
 }
 
 #root {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 100%;
   text-align: left;
@@ -237,72 +180,7 @@ body {
   background: var(--text-muted);
 }
 
-/* 保留 .glass 类名防止 JSX 报错，去掉 backdrop-filter */
-.glass {
-  /* backdrop-filter removed per design spec: 消费类 AI 应用标配，影响性能 */
-}
-
-/* Gradient text — only for brand logo */
-.gradient-text {
-  background: linear-gradient(90deg, var(--accent), #C4B8FF);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Mono numbers — data dashboard feel */
-.mono-num {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
-  letter-spacing: -0.02em;
-}
-
-/* System status chip — teal, mono, compact */
-.system-chip {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0;
-  color: var(--teal);
-  background: var(--teal-light);
-  border: 1px solid rgba(45,212,191,0.22);
-  border-radius: 4px;
-  padding: 2px 6px;
-  display: inline-block;
-}
-
-/* Context scan animation — teal scan line, only when active */
-@keyframes scan-y {
-  from { transform: translateY(0); }
-  to   { transform: translateY(100px); }
-}
-
-.context-scan {
-  position: relative;
-  overflow: hidden;
-}
-
-.context-scan::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: -1px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--teal), transparent);
-  opacity: 0.7;
-  animation: scan-y 1.8s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .context-scan::after { animation: none; opacity: 0.25; }
-}
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 0.35; transform: scale(0.8); }
-  50%       { opacity: 1;    transform: scale(1);   }
-}
-
+/* ── 动画 ── */
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -318,14 +196,25 @@ body {
   to   { transform: rotate(360deg); }
 }
 
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.35; transform: scale(0.8); }
+  50%       { opacity: 1;    transform: scale(1);   }
+}
+
+@keyframes brief-in {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .fade-in {
   animation: fade-in 0.25s ease-out forwards;
 }
 
-/* ── Markdown rendered content ── */
+/* ── Markdown 渲染内容 ── */
 .md p { margin: 0 0 10px; }
 .md p:last-child { margin-bottom: 0; }
 .md h1, .md h2, .md h3, .md h4 {
+  font-family: var(--font-ui);
   font-weight: 700; color: var(--text-primary);
   margin: 16px 0 8px; line-height: 1.35;
 }
@@ -341,11 +230,11 @@ body {
 .md code {
   font-family: var(--font-mono);
   font-size: 12.5px;
-  background: var(--accent-light);
+  background: var(--accent-dim);
   border: 1px solid var(--accent-border);
   border-radius: 4px;
   padding: 1px 5px;
-  color: var(--accent);
+  color: var(--accent-raw);
 }
 .md pre {
   background: var(--code-bg);
@@ -363,7 +252,7 @@ body {
   color: var(--code-text);
 }
 .md blockquote {
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--accent-raw);
   margin: 10px 0;
   padding: 6px 14px;
   color: var(--text-secondary);
@@ -385,8 +274,9 @@ body {
   background: var(--bg-hover);
   font-weight: 600;
   color: var(--text-primary);
+  font-family: var(--font-ui);
 }
-.md a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.md a { color: var(--accent-raw); text-decoration: underline; text-underline-offset: 3px; }
 .md hr {
   border: none;
   border-top: 1px solid var(--border);

@@ -84,9 +84,9 @@ export default function SearchModal({ onClose, onNavigate }) {
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>{p.name}</div>
-                    {(p.summary || (p.status && p.status !== 'active' && p.status !== 'archived')) && (
+                    {(p.status || p.summary) && (
                       <div style={{ fontSize: 11.5, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {p.summary || p.status}
+                        {p.status || p.summary}
                       </div>
                     )}
                   </div>
