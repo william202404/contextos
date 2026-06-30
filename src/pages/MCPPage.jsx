@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plug, Search, ExternalLink, Cpu, Globe, Terminal, CheckCircle, Loader } from 'lucide-react'
 import AppRail from '../components/AppRail'
-import { DEMO_SERVERS, searchMCPServers, getConnectedServers, saveConnectedServer, removeConnectedServer } from '../lib/mcp'
+import { DEMO_SERVERS, searchMCPServers, getConnectedServers, saveConnectedServer, removeConnectedServer, getServerToolDefs, isToolEnabled, setToolEnabled } from '../lib/mcp'
 import { BUILTIN_SKILLS, installSkillFull } from '../lib/skills'
 import { saveProject } from '../store/db'
 import { DEFAULT_MODEL } from '../lib/llm'
@@ -11,6 +11,13 @@ import { useTranslation } from 'react-i18next'
 import i18n from '../i18n'
 
 const CATEGORIES = ['全部', '搜索', '开发']
+
+// Tool risk levels → badge styling (colors via CSS vars)
+const RISK_META = {
+  read:  { color: 'var(--green)', bg: 'rgba(52,211,153,0.10)', border: 'rgba(52,211,153,0.25)' },
+  write: { color: 'var(--amber)', bg: 'rgba(251,191,36,0.10)', border: 'rgba(251,191,36,0.25)' },
+  high:  { color: 'var(--red)',   bg: 'rgba(248,113,113,0.10)', border: 'rgba(248,113,113,0.25)' },
+}
 
 const AGENT_TEMPLATES = [
   {
@@ -395,6 +402,22 @@ function MCPCard({ server, connected, onConnect, onDisconnect, onShowGuide }) {
   const needsKey = !!server.keyStore
   const hasKey = needsKey && !!localStorage.getItem(server.keyStore)
 
+  const toolDefs = getServerToolDefs(server.id)
+  // disabledMap[toolName] === true means the tool is turned off
+  const [disabledMap, setDisabledMap] = useState(() => {
+    const m = {}
+    toolDefs.forEach(td => { m[td.name] = !isToolEnabled(server.id, td.name) })
+    return m
+  })
+
+  function toggleTool(name) {
+    setDisabledMap(prev => {
+      const willDisable = !prev[name]
+      setToolEnabled(server.id, name, !willDisable)
+      return { ...prev, [name]: willDisable }
+    })
+  }
+
   return (
     <div style={{
       background: 'var(--bg-card)', border: '1px solid',
@@ -467,6 +490,45 @@ function MCPCard({ server, connected, onConnect, onDisconnect, onShowGuide }) {
           )}
         </div>
       </div>
+
+      {connected && toolDefs.length > 0 && (
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {t('mcp.toolPermissions')}
+          </div>
+          {toolDefs.map(td => {
+            const rm = RISK_META[td.risk] || RISK_META.read
+            const enabled = !disabledMap[td.name]
+            return (
+              <div key={td.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{
+                  fontSize: 11, flex: 1, fontFamily: 'var(--mono)',
+                  color: enabled ? 'var(--text-secondary)' : 'var(--text-muted)',
+                  textDecoration: enabled ? 'none' : 'line-through', opacity: enabled ? 1 : 0.6,
+                }}>{td.name}</span>
+                <span style={{
+                  fontSize: 9, padding: '1px 6px', borderRadius: 8, fontWeight: 600,
+                  color: rm.color, background: rm.bg, border: `1px solid ${rm.border}`,
+                }}>{t(`mcp.risk_${td.risk}`)}</span>
+                <button
+                  onClick={() => toggleTool(td.name)}
+                  title={enabled ? t('mcp.disableTool') : t('mcp.enableTool')}
+                  style={{
+                    width: 32, height: 18, borderRadius: 10, border: 'none', cursor: 'pointer',
+                    position: 'relative', flexShrink: 0, padding: 0,
+                    background: enabled ? 'var(--accent)' : 'var(--bg-hover)', transition: 'background 0.15s',
+                  }}
+                >
+                  <span style={{
+                    position: 'absolute', top: 2, left: enabled ? 16 : 2,
+                    width: 14, height: 14, borderRadius: '50%', background: 'white', transition: 'left 0.15s',
+                  }} />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

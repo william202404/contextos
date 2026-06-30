@@ -12,6 +12,7 @@ const SERVER_TOOLS = {
     {
       name: 'web_search',
       description: '使用 Brave 搜索引擎搜索网页，获取实时信息',
+      risk: 'read',
       input_schema: {
         type: 'object',
         properties: {
@@ -46,6 +47,7 @@ const SERVER_TOOLS = {
     {
       name: 'search_repositories',
       description: '搜索 GitHub 上的开源仓库',
+      risk: 'read',
       input_schema: {
         type: 'object',
         properties: {
@@ -85,6 +87,7 @@ const SERVER_TOOLS = {
     {
       name: 'get_file_contents',
       description: '读取 GitHub 仓库中某个文件的内容',
+      risk: 'read',
       input_schema: {
         type: 'object',
         properties: {
@@ -142,12 +145,50 @@ export function removeConnectedServer(id) {
   localStorage.setItem(CONNECTED_KEY, JSON.stringify(getConnectedServers().filter(s => s.id !== id)))
 }
 
+// --- Per-tool enable/disable (localStorage) ---
+
+const DISABLED_TOOLS_KEY = 'ctx_mcp_disabled_tools'
+
+function toolKey(serverId, toolName) {
+  return `${serverId}:${toolName}`
+}
+
+export function getDisabledTools() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(DISABLED_TOOLS_KEY) || '[]'))
+  } catch {
+    return new Set()
+  }
+}
+
+export function isToolEnabled(serverId, toolName) {
+  return !getDisabledTools().has(toolKey(serverId, toolName))
+}
+
+export function setToolEnabled(serverId, toolName, enabled) {
+  const disabled = getDisabledTools()
+  if (enabled) disabled.delete(toolKey(serverId, toolName))
+  else disabled.add(toolKey(serverId, toolName))
+  localStorage.setItem(DISABLED_TOOLS_KEY, JSON.stringify([...disabled]))
+}
+
+// Public tool metadata for UI display (no _execute)
+export function getServerToolDefs(serverId) {
+  return (SERVER_TOOLS[serverId] || []).map(d => ({
+    name: d.name,
+    description: d.description,
+    risk: d.risk || 'read',
+  }))
+}
+
 // --- Tool schema helpers ---
 
 export function getAllServerTools(connectedServers) {
+  const disabled = getDisabledTools()
   const tools = []
   for (const server of connectedServers) {
     for (const def of SERVER_TOOLS[server.id] || []) {
+      if (disabled.has(toolKey(server.id, def.name))) continue // user-disabled tool: hide from AI
       tools.push({
         name: def.name,
         description: def.description,
@@ -163,6 +204,7 @@ export async function executeTool(serverId, toolName, toolInput) {
   const defs = SERVER_TOOLS[serverId] || []
   const def = defs.find(d => d.name === toolName)
   if (!def?._execute) return `未找到工具 ${toolName}`
+  if (!isToolEnabled(serverId, toolName)) return `工具 ${toolName} 已被用户禁用`
   try {
     return await def._execute(toolInput)
   } catch (e) {

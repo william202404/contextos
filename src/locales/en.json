@@ -404,6 +404,12 @@
     "guideSoon": "Coming Soon",
     "guideNextVersion": "The next version will support launching local tools directly from ContextOS without manual installation or configuration. Watch for updates, or click \"View Docs\" to learn more.",
     "viewDocs": "View Docs",
-    "close": "Close"
+    "close": "Close",
+    "toolPermissions": "Tool Permissions",
+    "risk_read": "Read",
+    "risk_write": "Write",
+    "risk_high": "High Risk",
+    "enableTool": "Enable tool",
+    "disableTool": "Disable tool"
   }
 }

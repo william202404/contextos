@@ -404,6 +404,12 @@
     "guideSoon": "即将支持",
     "guideNextVersion": "下一版本将支持在 ContextOS 内直接一键启动本地工具，无需手动安装或配置。你可以关注版本更新，或点击下方「查看文档」了解此工具的功能。",
     "viewDocs": "查看文档",
-    "close": "关闭"
+    "close": "关闭",
+    "toolPermissions": "工具权限",
+    "risk_read": "读取",
+    "risk_write": "写入",
+    "risk_high": "高风险",
+    "enableTool": "启用工具",
+    "disableTool": "禁用工具"
   }
 }
