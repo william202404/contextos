@@ -4,7 +4,7 @@ export const MODELS = {
   'gpt-4o': { label: 'GPT-4o', provider: 'openai', tag: 'GPT' },
 }
 
-export const DEFAULT_MODEL = 'claude-sonnet-4-6'
+export const DEFAULT_MODEL = 'qwen3.6:latest'
 
 export function getApiKeys() {
   return {
@@ -64,10 +64,12 @@ export async function getOllamaModels() {
     const models = {}
     for (const m of data.models || []) {
       if (m.remote_host) continue
+      const modelName = m.name || ''
+      if (/embed|embedding|bge/i.test(modelName)) continue
       // capabilities 字段仅新版 Ollama 有，没有该字段时默认当对话模型处理
       const caps = m.capabilities
       if (caps && !caps.includes('completion')) continue
-      models[m.name] = { label: m.name, provider: 'ollama', tag: 'Ollama' }
+      models[modelName] = { label: modelName, provider: 'ollama', tag: 'Ollama' }
     }
     return models
   } catch {
