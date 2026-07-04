@@ -1,15 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 export default function CreateProjectModal({ suggestedName, suggestedSummary, onConfirm, onCancel, loading }) {
   const { t } = useTranslation()
   const [name, setName] = useState(suggestedName || '')
   const [summary, setSummary] = useState(suggestedSummary || '')
-
-  useEffect(() => {
-    setName(suggestedName || '')
-    setSummary(suggestedSummary || '')
-  }, [suggestedName, suggestedSummary])
 
   function handleConfirm() {
     if (!name.trim()) return

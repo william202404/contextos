@@ -7,6 +7,14 @@ function knowledgeToLines(knowledge) {
   return []
 }
 
+function normalizeKnowledge(knowledge) {
+  if (Array.isArray(knowledge)) return knowledge
+  if (typeof knowledge === 'string' && knowledge.trim()) {
+    return knowledge.split('\n').filter(l => l.trim()).map(content => ({ content, type: 'conclusion' }))
+  }
+  return []
+}
+
 // 按用户消息关键词对知识条目做相关度排序，最多返回 maxLines 条
 function filterKnowledge(knowledge, userMessage, maxLines = 8) {
   const lines = knowledgeToLines(knowledge)
@@ -22,6 +30,19 @@ function filterKnowledge(knowledge, userMessage, maxLines = 8) {
   }))
   scored.sort((a, b) => b.score - a.score)
   return scored.slice(0, maxLines).map(e => e.line).join('\n')
+}
+
+function selectKnowledgeItems(knowledge, userMessage, maxItems = 8) {
+  const items = normalizeKnowledge(knowledge)
+  if (items.length <= maxItems) return items
+
+  const words = (userMessage.match(/[一-龥a-z0-9]{2,}/g) || [])
+  if (words.length === 0) return items.slice(0, maxItems)
+
+  return items.map(item => ({
+    item,
+    score: words.reduce((s, w) => s + ((item.content || '').includes(w) ? 1 : 0), 0),
+  })).sort((a, b) => b.score - a.score).slice(0, maxItems).map(e => e.item)
 }
 
 // 返回用于 context bar 显示的注入说明（不含技能）
@@ -99,4 +120,54 @@ export function buildProjectContext(intent, project, memory, skills = [], userMe
   }
 
   return ctx
+}
+
+export function buildContextSnapshot(intent, project, memory, skills = [], files = [], userMessage = '') {
+  if (!project || project.isTemp) {
+    return {
+      intent,
+      projectName: project?.name || '',
+      skippedHistory: true,
+      reason: '临时对话尚未写入项目上下文',
+      status: '',
+      knowledge: [],
+      memory: [],
+      skills: skills.map(s => ({ id: s.id, name: s.name, icon: s.icon })),
+      files: [],
+      createdAt: Date.now(),
+    }
+  }
+
+  const selectedKnowledge = intent === INTENT.NEW_TOPIC ? [] : selectKnowledgeItems(project.knowledge, userMessage)
+  const memoryLines = intent === INTENT.NEW_TOPIC
+    ? []
+    : (memory?.content || '').split('\n').filter(l => l.trim()).slice(0, 8)
+  const uploadedFiles = files
+    .filter(f => f.source === 'upload' && (f.content || f.imageData))
+    .slice(0, 8)
+    .map(f => ({
+      id: f.id,
+      name: f.name,
+      kind: f.imageData ? 'image' : 'text',
+      chars: f.content?.length || 0,
+    }))
+
+  return {
+    intent,
+    projectName: project.name,
+    skippedHistory: intent === INTENT.NEW_TOPIC,
+    reason: intent === INTENT.NEW_TOPIC ? '用户表达了新话题意图，历史上下文未注入' : '',
+    status: intent === INTENT.KNOWLEDGE_QUERY ? '' : (project.status || ''),
+    knowledge: selectedKnowledge.map(k => ({
+      id: k.id,
+      content: k.content,
+      type: k.type || 'conclusion',
+      date: k.date || '',
+      source: k.source || 'legacy',
+    })),
+    memory: memoryLines,
+    skills: skills.map(s => ({ id: s.id, name: s.name, icon: s.icon })),
+    files: uploadedFiles,
+    createdAt: Date.now(),
+  }
 }

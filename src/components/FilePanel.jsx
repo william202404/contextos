@@ -3,6 +3,7 @@ import { GitBranch, Network, FileText, Upload, FileArchive, Sparkles, Brain, X, 
 import MarkmapViewer from './MarkmapViewer'
 import { useTranslation } from 'react-i18next'
 import i18n from '../i18n'
+import { sanitizeSvg } from '../lib/sanitizeSvg'
 
 const FILE_ICONS = {
   flowchart: { Icon: GitBranch,  color: 'var(--accent)',  bg: 'var(--accent-glow)' },
@@ -13,7 +14,7 @@ const FILE_ICONS = {
   pdf:       { Icon: FileArchive, color: 'var(--red)',    bg: 'var(--red-bg)' },
 }
 
-export default function FilePanel({ project, files, messages = [], tokenPercent = 0, onGenerateSummary, onSummaryEdit, onKnowledgeEdit, onConsolidateKnowledge, memory, reflectionRunning, onMemoryEdit, onReflect }) {
+export default function FilePanel({ project, files, messages = [], tokenPercent = 0, onGenerateSummary, onSummaryEdit, onKnowledgeEdit, onConsolidateKnowledge, memory, memoryNotice, onClearMemoryNotice, reflectionRunning, onMemoryEdit, onMemoryRollback, onReflect }) {
   const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState('files')
   const [summarySubTab, setSummarySubTab] = useState('status') // 'status' | 'knowledge'
@@ -67,7 +68,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
     const text = newKnowledge.trim()
     if (!text) return
     const today = new Date().toLocaleDateString('zh-CN')
-    const entry = { id: crypto.randomUUID(), content: text, date: today, type: 'conclusion' }
+    const entry = { id: crypto.randomUUID(), content: text, date: today, type: 'conclusion', source: 'manual', createdAt: Date.now() }
     onKnowledgeEdit?.([...knowledgeItems, entry])
     setNewKnowledge('')
     setAddingKnowledge(false)
@@ -129,7 +130,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
               transition: 'all 0.15s',
             }}
           >
-            {{ files: t('filePanel.tabFiles'), summary: t('filePanel.tabSummary'), memory: t('filePanel.tabMemory'), history: t('filePanel.tabHistory') }[tab]}
+            {{ files: t('filePanel.tabFiles'), summary: t('filePanel.tabContext'), memory: t('filePanel.tabMemory'), history: t('filePanel.tabHistory') }[tab]}
           </button>
         ))}
       </div>
@@ -178,7 +179,7 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
           </>
         )}
 
-        {/* 摘要 tab：当前状态 + 知识库 */}
+        {/* 项目上下文 tab：当前状态 + 知识库 */}
         {activeTab === 'summary' && (
           <div>
             {/* 子 Tab */}
@@ -261,9 +262,12 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
                           <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1, opacity: 0.8 }}>💡</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{item.content}</span>
-                            {item.date && (
-                              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>{item.date}</div>
-                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 3 }}>
+                              {item.date && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{item.date}</span>}
+                              <span style={{ fontSize: 9, color: 'var(--text-muted)', padding: '1px 5px', borderRadius: 4, background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+                                {{ auto: t('filePanel.knowledgeSourceAuto'), manual: t('filePanel.knowledgeSourceManual'), consolidated: t('filePanel.knowledgeSourceConsolidated'), legacy: t('filePanel.knowledgeSourceLegacy') }[item.source || 'legacy']}
+                              </span>
+                            </div>
                           </div>
                           <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
                             <button onClick={() => navigator.clipboard.writeText(item.content)}
@@ -329,8 +333,11 @@ export default function FilePanel({ project, files, messages = [], tokenPercent 
         {activeTab === 'memory' && (
           <MemoryTab
             memory={memory}
+            memoryNotice={memoryNotice}
+            onClearMemoryNotice={onClearMemoryNotice}
             reflectionRunning={reflectionRunning}
             onSave={onMemoryEdit}
+            onRollback={onMemoryRollback}
             onReflect={onReflect}
             messageCount={messages.length}
           />
@@ -363,8 +370,10 @@ function FilePreviewModal({ file, onClose }) {
     }).then(({ svg }) => {
       if (cancelled || !mermaidRef.current) return
       const host = mermaidRef.current
+      const safeSvg = sanitizeSvg(svg)
+      if (!safeSvg) return
       if (!host.shadowRoot) host.attachShadow({ mode: 'open' })
-      host.shadowRoot.innerHTML = `<style>:host{display:block}svg{max-width:100%;height:auto}</style>${svg}`
+      host.shadowRoot.innerHTML = `<style>:host{display:block}svg{max-width:100%;height:auto}</style>${safeSvg}`
     }).catch(() => {
       if (!cancelled && mermaidRef.current) mermaidRef.current.textContent = file.code
     })
@@ -413,12 +422,13 @@ function FilePreviewModal({ file, onClose }) {
 
 function HistoryTab({ messages }) {
   const { t } = useTranslation()
+  const [now] = useState(() => Date.now())
   if (messages.length === 0) {
     return <Empty>{t('filePanel.noHistory')}</Empty>
   }
 
   const today = new Date().toDateString()
-  const yesterday = new Date(Date.now() - 86400000).toDateString()
+  const yesterday = new Date(now - 86400000).toDateString()
 
   const grouped = messages.reduce((acc, m) => {
     const d = new Date(m.timestamp)
@@ -497,7 +507,8 @@ function Empty({ children }) {
 function FileItem({ file, onClick }) {
   const info = FILE_ICONS[file.type] || FILE_ICONS.upload
   const { Icon } = info
-  const isNew = file.createdAt && Date.now() - file.createdAt < 60_000
+  const [now] = useState(() => Date.now())
+  const isNew = file.createdAt && now - file.createdAt < 60_000
   const canPreview = onClick && (file.code || file.content)
 
   return (
@@ -545,7 +556,7 @@ function formatTime(ts) {
   return new Date(ts).toLocaleDateString(i18n.language === 'zh' ? 'zh-CN' : undefined)
 }
 
-function MemoryTab({ memory, reflectionRunning, onSave, onReflect, messageCount }) {
+function MemoryTab({ memory, memoryNotice, onClearMemoryNotice, reflectionRunning, onSave, onRollback, onReflect, messageCount }) {
   const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -573,21 +584,38 @@ function MemoryTab({ memory, reflectionRunning, onSave, onReflect, messageCount 
             </span>
           )}
         </div>
-        <button
-          onClick={onReflect}
-          disabled={!canReflect}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: canReflect ? 'pointer' : 'default',
-            border: '1px solid var(--border)', background: 'var(--bg-card)',
-            color: canReflect ? 'var(--accent)' : 'var(--text-muted)',
-            fontWeight: 500, transition: 'all 0.15s',
-          }}
-        >
-          <Brain size={11} />
-          {reflectionRunning ? t('filePanel.reflecting') : t('filePanel.reflect')}
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {memory?.snapshot && (
+            <button
+              onClick={onRollback}
+              style={{ fontSize: 11, padding: '4px 9px', borderRadius: 6, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-muted)', fontWeight: 500 }}
+            >
+              {t('filePanel.rollback')}
+            </button>
+          )}
+          <button
+            onClick={onReflect}
+            disabled={!canReflect}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: canReflect ? 'pointer' : 'default',
+              border: '1px solid var(--border)', background: 'var(--bg-card)',
+              color: canReflect ? 'var(--accent)' : 'var(--text-muted)',
+              fontWeight: 500, transition: 'all 0.15s',
+            }}
+          >
+            <Brain size={11} />
+            {reflectionRunning ? t('filePanel.reflecting') : t('filePanel.reflect')}
+          </button>
+        </div>
       </div>
+
+      {memoryNotice && (
+        <div style={{ marginBottom: 10, padding: '8px 10px', borderRadius: 8, background: 'var(--accent-glow)', border: '1px solid var(--accent-border)', color: 'var(--accent)', fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ flex: 1 }}>{memoryNotice}</span>
+          <button onClick={onClearMemoryNotice} style={{ border: 'none', background: 'transparent', color: 'var(--accent)', cursor: 'pointer', fontSize: 12 }}>×</button>
+        </div>
+      )}
 
       {editing ? (
         <div>

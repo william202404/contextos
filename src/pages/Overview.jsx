@@ -6,14 +6,21 @@ import {
   getWeeklyAICount, getTodayActivity, getPrevWeekAICount, getNewProjectsCount, toggleProjectPin,
 } from '../store/db'
 import { DEFAULT_MODEL } from '../lib/llm'
-import SettingsModal, { getUserProfile } from '../components/SettingsModal'
+import SettingsModal from '../components/SettingsModal'
+import { getUserProfile } from '../lib/preferences'
 import DecomposeModal from '../components/DecomposeModal'
 import SearchModal from '../components/SearchModal'
 import AppRail from '../components/AppRail'
+import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
 
 const isElectron = !!window.electronAPI
 
 const TEMPLATES = [
+  { id: 'organize-info', icon: '📋', name: '帮我整理', desc: '把杂乱信息梳理成结构和结论', skillTag: '信息整理', systemPrompt: '你是一位信息整理助手。请帮我把零散内容整理成清晰结构，区分事实、结论、待确认问题和下一步行动。先问我要整理的材料或背景。' },
+  { id: 'plan-day', icon: '📅', name: '帮我计划', desc: '拆解目标、安排优先级和执行节奏', skillTag: '计划助手', systemPrompt: '你是一位计划助手。请帮我把目标拆成可执行任务，安排优先级、时间节奏和风险预案。先了解我的目标、时间和限制。' },
+  { id: 'brainstorm', icon: '💡', name: '帮我想想', desc: '围绕一个问题发散思路并收敛方案', skillTag: '头脑风暴', systemPrompt: '你是一位头脑风暴伙伴。先发散多个方向，再帮助我收敛成可执行方案。请主动追问问题背景、目标受众和约束。' },
+  { id: 'daily-review', icon: '🔄', name: '帮我复盘', desc: '回顾进展、提炼经验和下一步', skillTag: '复盘助手', systemPrompt: '你是一位复盘助手。请围绕目标、事实、结果、原因、经验和下一步行动，引导我完成一次清晰复盘。先问我要复盘的事情。' },
   { id: 'competitive-analysis', icon: '🔍', name: '竞品分析', desc: '系统拆解竞品功能、定位与差异化机会', skillTag: '竞品分析师', systemPrompt: '你是一位竞品分析师。请系统分析竞品的功能定位、产品策略和优劣势，帮我找到差异化机会。先了解我要分析的对象和目标市场。' },
   { id: 'decision-framework', icon: '⚖️', name: '辅助决策', desc: '用框架评估选项，识别隐藏假设和风险', skillTag: '决策框架师', systemPrompt: '你是一位决策框架师。使用 RICE/ICE 或决策矩阵帮我评估选项，识别隐藏假设和风险，给出综合建议。先了解我面临的决策情况。' },
   { id: 'user-research', icon: '👥', name: '用户调研', desc: '设计访谈提纲，分析反馈，提炼核心痛点', skillTag: '用户调研向导', systemPrompt: '你是一位用户研究专家。帮我设计访谈提纲，分析用户反馈，提炼核心痛点和需求。先告诉我你的目标用户群体和研究目标。' },
@@ -23,16 +30,18 @@ const TEMPLATES = [
 ]
 
 function getGreeting(name) {
+  const t = i18n.t.bind(i18n)
   const hour = new Date().getHours()
-  const n = name ? `，${name}` : ''
-  if (hour < 6)  return { text: `夜深了${n} 🌙`, sub: '适合专注，也别忘了休息' }
-  if (hour < 10) return { text: `早上好${n} ☀️`, sub: '新的一天，从清晰的目标开始' }
-  if (hour < 14) return { text: `上午好${n} ✨`, sub: '思路正清晰，适合深度工作' }
-  if (hour < 18) return { text: `下午好${n} ☀️`, sub: '保持节奏，继续推进今天的进展' }
-  return { text: `晚上好${n} 🌆`, sub: '回顾今天的收获，为明天做好准备' }
+  const n = name ? `${t('overview.nameSep')}${name}` : ''
+  if (hour < 6)  return { text: `${t('overview.lateNightGreet')}${n}`, sub: t('overview.lateNightHint') }
+  if (hour < 10) return { text: `${t('overview.morningGreet')}${n}`, sub: t('overview.morningHint') }
+  if (hour < 14) return { text: `${t('overview.forenoonGreet')}${n}`, sub: t('overview.forenoonHint') }
+  if (hour < 18) return { text: `${t('overview.afternoonGreet')}${n}`, sub: t('overview.afternoonHint') }
+  return { text: `${t('overview.eveningGreet')}${n}`, sub: t('overview.eveningHint') }
 }
 
 export default function Overview() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [projects, setProjects] = useState([])
   const [archivedProjects, setArchivedProjects] = useState([])
@@ -46,6 +55,7 @@ export default function Overview() {
   const [animateStats, setAnimateStats] = useState(false)
   const [showDecompose, setShowDecompose] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [now] = useState(() => Date.now())
 
   useEffect(() => {
     loadData()
@@ -100,7 +110,7 @@ export default function Overview() {
     const activityCtx = hasActivity ? `\n\n用户今天在 ContextOS 中的活动记录如下：${activityBlock}` : '\n\n用户今天在 ContextOS 暂无对话记录。'
     const systemPrompt = `你是用户的 AI 工作伙伴，现在是 ${dateStr} ${timeStr}，是做今日复盘的好时机。${activityCtx}\n\n请按以下节奏展开对话：\n1. 用 1-2 句自然的话打招呼，${hasActivity ? '简短点出今天看到的工作内容（基于上面的记录）' : '问用户今天都在忙些什么'}\n2. 主动问用户：今天完成了什么？有没有卡住或者没做完的事？\n3. 等用户回复后，帮他整理出明日待办清单，要求：\n   - 每项具体可执行，不泛泛而谈\n   - 标注优先级：🔴 必做 / 🟡 重要 / ⚪ 可以推迟\n   - 结合今天未完成的事和明天需要跟进的内容\n\n语气像一个了解你工作状态的同事，亲切自然，不要太正式。`
     await saveConversation({ id, title: `${dateStr} 复盘`, systemPrompt, preview: '今日复盘 · 整理明日待办', rounds: 0, createdAt: now, updatedAt: now })
-    navigate(`/project/${id}?convId=${id}`)
+    navigate(`/project/${id}?thread=${id}`)
   }
 
   async function handleNewProject() {
@@ -114,7 +124,7 @@ export default function Overview() {
     const id = crypto.randomUUID()
     const now = Date.now()
     await saveConversation({ id, title: template.name, systemPrompt: template.systemPrompt, preview: '', rounds: 0, createdAt: now, updatedAt: now })
-    navigate(`/project/${id}?template=${template.id}&convId=${id}`)
+    navigate(`/project/${id}?template=${template.id}&thread=${id}`)
   }
 
   async function handleArchiveProject(projId, e) {
@@ -126,14 +136,14 @@ export default function Overview() {
   }
 
   async function handleDeleteProject(id) {
-    if (!confirm('确定删除这个项目吗？')) return
+    if (!confirm(t('project.deleteConfirm'))) return
     await deleteProject(id)
     setProjects(prev => prev.filter(p => p.id !== id))
     setArchivedProjects(prev => prev.filter(p => p.id !== id))
   }
 
   async function handleDeleteConv(id) {
-    if (!confirm('确定删除这条对话吗？')) return
+    if (!confirm(t('project.deleteConvConfirm'))) return
     await deleteConversation(id)
     setConversations(prev => prev.filter(c => c.id !== id))
   }
@@ -152,12 +162,35 @@ export default function Overview() {
   const knowledgeCount = projects.reduce((sum, p) => sum + (Array.isArray(p.knowledge) ? p.knowledge.length : 0), 0)
   const focusProject = sortedProjects[0]
   const weeklyDelta = weeklyCount - prevWeekCount
+  const staleProjects = sortedProjects.filter(p => p.updatedAt && now - p.updatedAt > 14 * 24 * 60 * 60 * 1000).slice(0, 3)
+  const heavyKnowledgeProjects = sortedProjects.filter(p => Array.isArray(p.knowledge) && p.knowledge.length >= 8).slice(0, 3)
+  const pendingConversations = conversations.slice(0, 3)
+  const workbenchCards = [
+    {
+      title: t('overview.workbenchContinue'),
+      value: focusProject?.name || t('overview.noActiveProject'),
+      desc: focusProject?.status || t('overview.noActiveProjectDesc'),
+      action: focusProject ? () => navigate(`/project/${focusProject.id}`) : handleNewProject,
+    },
+    {
+      title: t('overview.workbenchPending'),
+      value: t('overview.pendingCount', { count: pendingConversations.length }),
+      desc: pendingConversations[0]?.title || t('overview.pendingEmpty'),
+      action: pendingConversations[0] ? () => navigate(`/project/${pendingConversations[0].id}?thread=${pendingConversations[0].id}`) : handleDailyGuide,
+    },
+    {
+      title: t('overview.workbenchHealth'),
+      value: t('overview.healthCount', { count: staleProjects.length + heavyKnowledgeProjects.length }),
+      desc: heavyKnowledgeProjects[0]?.name ? t('overview.healthKnowledge', { name: heavyKnowledgeProjects[0].name }) : staleProjects[0]?.name ? t('overview.healthStale', { name: staleProjects[0].name }) : t('overview.healthGood'),
+      action: heavyKnowledgeProjects[0] || staleProjects[0] ? () => navigate(`/project/${(heavyKnowledgeProjects[0] || staleProjects[0]).id}`) : handleDailyGuide,
+    },
+  ]
 
   const stats = [
-    { label: '活跃项目', value: projects.length, color: 'var(--accent-raw)', delta: newProjectsCount > 0 ? `↑ ${newProjectsCount} 本月新增` : null },
-    { label: '知识条目', value: knowledgeCount, color: 'var(--cyan)', delta: null },
-    { label: '本周对话', value: weeklyCount, color: 'var(--green)', delta: weeklyDelta > 0 ? `↑ ${weeklyDelta} 较上周` : weeklyDelta < 0 ? `↓ ${Math.abs(weeklyDelta)} 较上周` : null },
-    { label: '未归项', value: conversations.length, color: 'var(--amber)', delta: null },
+    { label: t('overview.statsActive'), value: projects.length, color: 'var(--accent-raw)', delta: newProjectsCount > 0 ? t('overview.monthlyNew', { count: newProjectsCount }) : null },
+    { label: t('overview.statsKnowledge'), value: knowledgeCount, color: 'var(--cyan)', delta: null },
+    { label: t('overview.statsWeekly'), value: weeklyCount, color: 'var(--green)', delta: weeklyDelta > 0 ? t('overview.weeklyUp', { count: weeklyDelta }) : weeklyDelta < 0 ? t('overview.weeklyDown', { count: Math.abs(weeklyDelta) }) : null },
+    { label: t('overview.statsConvs'), value: conversations.length, color: 'var(--amber)', delta: null },
   ]
 
   return (
@@ -183,7 +216,7 @@ export default function Overview() {
             onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)' }}
             title="搜索 ⌘K"
-          >⌕</button>
+              >⌕</button>
           <button onClick={handleNewProject} style={{ width: 34, height: 34, borderRadius: 8, border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, transition: 'all 0.15s' }}
             onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)' }}
@@ -220,8 +253,8 @@ export default function Overview() {
             >
               <div style={{ fontSize: 16, flexShrink: 0 }}>🎯</div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                <strong style={{ color: 'var(--text-primary)', fontWeight: 600, fontFamily: 'var(--font-ui)' }}>今日重点</strong><br />
-                {focusProject ? focusProject.name + ' · 继续推进' : '点击开始今日复盘'}
+                <strong style={{ color: 'var(--text-primary)', fontWeight: 600, fontFamily: 'var(--font-ui)' }}>{t('overview.todayFocus')}</strong><br />
+                {focusProject ? t('overview.continueProject', { name: focusProject.name }) : t('overview.startDailyReview')}
               </div>
             </div>
           </div>
@@ -233,36 +266,62 @@ export default function Overview() {
             ))}
           </div>
 
+          {/* 今日工作台 */}
+          <div>
+            <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em', marginBottom: 12 }}>
+              {t('overview.todayWorkbench')}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+              {workbenchCards.map(card => (
+                <button
+                  key={card.title}
+                  onClick={card.action}
+                  style={{
+                    textAlign: 'left', background: 'var(--bg-card)', border: '1px solid var(--border)',
+                    borderRadius: 10, padding: 14, cursor: 'pointer',
+                    display: 'flex', flexDirection: 'column', gap: 6, minHeight: 108,
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-card)' }}
+                >
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{card.title}</span>
+                  <span style={{ fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{card.value}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{card.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* 项目区 */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: 7 }}>
-                项目空间
+                {t('overview.sectionProjects')}
                 {projects.length > 0 && (
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-muted)', padding: '1px 6px', borderRadius: 4, fontWeight: 400 }}>
-                    {projects.length}个
+                    {t('overview.projectCount', { count: projects.length })}
                   </span>
                 )}
               </div>
               <button onClick={() => navigate('/skills')} style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--accent-raw)', cursor: 'pointer', background: 'none', border: 'none', opacity: 0.8, transition: 'opacity 0.15s' }}
                 onMouseEnter={e => e.currentTarget.style.opacity = '1'}
                 onMouseLeave={e => e.currentTarget.style.opacity = '0.8'}
-              >技能库 →</button>
+              >{t('overview.skillMarket')} →</button>
             </div>
 
             {projects.length === 0 ? (
               <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '32px 28px', animation: 'slide-up 0.4s ease-out' }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', marginBottom: 6 }}>开始你的第一个项目</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-ui)', marginBottom: 6 }}>{t('overview.firstProjectTitle')}</div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.8 }}>
-                  创建项目，每次对话自动积累上下文<br />
-                  AI 每次进入都知道你做了什么、决定了什么
+                  {t('overview.firstProjectDesc1')}<br />
+                  {t('overview.firstProjectDesc2')}
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={handleDailyGuide} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.22)', color: 'var(--amber)' }}>
-                    ⚡ 今日复盘
+                    ⚡ {t('overview.dailyReview')}
                   </button>
                   <button onClick={handleNewProject} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
-                    + 新建项目
+                    + {t('overview.newProject')}
                   </button>
                 </div>
               </div>
@@ -284,13 +343,13 @@ export default function Overview() {
                       onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'transparent' }}
                     >
                       <div style={{ fontSize: 20, color: 'var(--text-muted)' }}>+</div>
-                      <div style={{ fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>新建项目</div>
+                      <div style={{ fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>{t('overview.newProject')}</div>
                     </div>
                   )}
                 </div>
                 {projects.length > 6 && (
                   <button onClick={() => setShowAllProjects(v => !v)} style={{ marginTop: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '9px 0', borderRadius: 8, fontSize: 11, cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontWeight: 500, transition: 'all 0.15s' }}>
-                    {showAllProjects ? '↑ 收起' : `↓ 展开全部 ${projects.length} 个项目`}
+                    {showAllProjects ? t('overview.collapse') : t('overview.expandAllProjects', { count: projects.length })}
                   </button>
                 )}
               </>
@@ -300,7 +359,7 @@ export default function Overview() {
           {/* 快速开始 */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>快速开始</div>
+              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>{t('overview.sectionQuickStart')}</div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
               {TEMPLATES.map((tmpl, i) => (
@@ -330,15 +389,15 @@ export default function Overview() {
           {conversations.length > 0 && (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
-                <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>最近对话</div>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-muted)', padding: '1px 6px', borderRadius: 4, fontWeight: 400 }}>未归项</span>
+                <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>{t('overview.recentConversations')}</div>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-muted)', padding: '1px 6px', borderRadius: 4, fontWeight: 400 }}>{t('overview.unfiled')}</span>
                 <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>共 {conversations.length} 条</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>{t('overview.totalConversations', { count: conversations.length })}</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {conversations.slice(0, 8).map(conv => (
                   <ConvRow key={conv.id} conv={conv}
-                    onNavigate={() => navigate(`/project/${conv.id}?convId=${conv.id}`)}
+                    onNavigate={() => navigate(`/project/${conv.id}?thread=${conv.id}`)}
                     onPromote={() => handlePromoteConv(conv)}
                     onDelete={() => handleDeleteConv(conv.id)}
                   />
@@ -350,7 +409,7 @@ export default function Overview() {
           {/* 归档项目 */}
           {archivedProjects.length > 0 && (
             <div style={{ paddingTop: 8, borderTop: '1px dashed var(--border)', opacity: 0.6 }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>已归档 · {archivedProjects.length}个</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{t('overview.archivedCount', { count: archivedProjects.length })}</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                 {archivedProjects.map(p => (
                   <div key={p.id} onClick={() => navigate(`/project/${p.id}`)} style={{ padding: '10px 12px', borderRadius: 8, cursor: 'pointer', background: 'var(--bg-card)', border: '1px dashed var(--border)', transition: 'opacity 0.15s' }}
@@ -384,6 +443,7 @@ export default function Overview() {
 
 function ProjectCard({ project: p, index, navigate, onPin }) {
   const [hovered, setHovered] = useState(false)
+  const [now] = useState(() => Date.now())
   const knowledgeLen = Array.isArray(p.knowledge) ? p.knowledge.length : 0
   const depthPct = Math.min(100, Math.round((knowledgeLen / 20) * 100))
   const isActive = !p.archived
@@ -393,7 +453,7 @@ function ProjectCard({ project: p, index, navigate, onPin }) {
     paused: { label: '暂停中', bg: 'rgba(251,191,36,0.08)', border: 'rgba(251,191,36,0.2)', color: 'var(--amber)' },
     archived: { label: '已归档', bg: 'rgba(126,134,158,0.08)', border: 'rgba(126,134,158,0.2)', color: 'var(--text-muted)' },
   }
-  const recentlyActive = p.updatedAt && (Date.now() - p.updatedAt < 7 * 24 * 60 * 60 * 1000)
+  const recentlyActive = p.updatedAt && (now - p.updatedAt < 7 * 24 * 60 * 60 * 1000)
   const st = statusMap[p.archived ? 'archived' : recentlyActive ? 'active' : 'paused']
 
   return (

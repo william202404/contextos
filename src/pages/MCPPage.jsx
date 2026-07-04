@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plug, Search, ExternalLink, Cpu, Globe, Terminal, CheckCircle, Loader } from 'lucide-react'
 import AppRail from '../components/AppRail'
-import { DEMO_SERVERS, searchMCPServers, getConnectedServers, saveConnectedServer, removeConnectedServer, getServerToolDefs, isToolEnabled, setToolEnabled } from '../lib/mcp'
+import { DEMO_SERVERS, searchMCPServers, getConnectedServers, saveConnectedServer, removeConnectedServer, getServerToolDefs, isToolEnabled, setToolEnabled, connectCustomServer, getAllowRiskyTools, setAllowRiskyTools } from '../lib/mcp'
 import { BUILTIN_SKILLS, installSkillFull } from '../lib/skills'
 import { saveProject } from '../store/db'
 import { DEFAULT_MODEL } from '../lib/llm'
-import SettingsModal, { getUserProfile } from '../components/SettingsModal'
+import SettingsModal from '../components/SettingsModal'
+import { getUserProfile } from '../lib/preferences'
 import { useTranslation } from 'react-i18next'
 import i18n from '../i18n'
 
@@ -50,6 +51,8 @@ export default function MCPPage() {
   const [showSettings, setShowSettings] = useState(false)
   const [keyModal, setKeyModal] = useState(null) // null | { server, value }
   const [toolRev, setToolRev] = useState(0) // bump to recompute tool-derived stats after a toggle
+  const [customModal, setCustomModal] = useState(null) // null | { name, url, auth, key, testing, error }
+  const [allowRiskyTools, setAllowRiskyToolsState] = useState(() => getAllowRiskyTools())
   const profile = getUserProfile()
   const displayName = profile.name || 'ContextOS'
 
@@ -101,6 +104,23 @@ export default function MCPPage() {
     setConnectedIds(prev => { const next = new Set(prev); next.delete(serverId); return next })
   }
 
+  async function handleCustomSubmit() {
+    if (!customModal?.url?.trim() || customModal.testing) return
+    setCustomModal(prev => ({ ...prev, testing: true, error: null }))
+    try {
+      const server = await connectCustomServer({
+        name: customModal.name?.trim(),
+        url: customModal.url.trim(),
+        apiKey: customModal.auth === 'apiKey' ? customModal.key?.trim() : undefined,
+      })
+      saveConnectedServer(server)
+      setConnectedIds(prev => new Set([...prev, server.id]))
+      setCustomModal(null)
+    } catch (e) {
+      setCustomModal(prev => ({ ...prev, testing: false, error: e.message || '连接失败' }))
+    }
+  }
+
   async function handleDeploy(template) {
     if (deploying) return
     setDeploying(template.id)
@@ -133,18 +153,32 @@ export default function MCPPage() {
     }
   }
 
+  function handleRiskyToggle() {
+    const next = !allowRiskyTools
+    setAllowRiskyTools(next)
+    setAllowRiskyToolsState(next)
+  }
+
   // --- Connection summary metrics (recomputed when connections or tool toggles change) ---
   void toolRev // dependency marker: re-read tool states after a toggle
-  const connectedCuratedServers = DEMO_SERVERS.filter(s => connectedIds.has(s.id))
-  const availableToolCount = connectedCuratedServers.reduce(
-    (sum, s) => sum + getServerToolDefs(s.id).filter(td => isToolEnabled(s.id, td.name)).length, 0,
+  const customServers = getConnectedServers().filter(s => s.custom)
+  // Curated + custom servers that are connected and carry tool definitions
+  const connectedToolServers = [...DEMO_SERVERS.filter(s => connectedIds.has(s.id)), ...customServers]
+  const availableToolCount = connectedToolServers.reduce(
+    (sum, s) => sum + getServerToolDefs(s).filter(td => isToolEnabled(s.id, td.name)).length, 0,
   )
-  const pendingCount = connectedCuratedServers.filter(s => s.keyStore && !localStorage.getItem(s.keyStore)).length
+  const pendingCount = connectedToolServers.filter(s => s.keyStore && !localStorage.getItem(s.keyStore)).length
   const summaryStats = [
     { label: t('mcp.statConnected'), value: connectedIds.size },
     { label: t('mcp.statAvailableTools'), value: availableToolCount },
     { label: t('mcp.statPending'), value: pendingCount },
   ]
+
+  const inputStyle = {
+    width: '100%', padding: '9px 12px', borderRadius: 9, fontSize: 13,
+    background: 'var(--bg-input)', border: '1px solid var(--border)',
+    color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box',
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>
@@ -191,10 +225,19 @@ export default function MCPPage() {
             }}>
               <Plug size={20} color="white" />
             </div>
-            <div>
+            <div style={{ flex: 1 }}>
               <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{t('mcp.pageTitle')}</h1>
               <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>{t('mcp.pageDesc')}</p>
             </div>
+            <button
+              onClick={() => setCustomModal({ name: '', url: '', auth: 'none', key: '', testing: false, error: null })}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 14px', borderRadius: 9, fontSize: 13, fontWeight: 600,
+                background: 'var(--accent)', border: 'none', color: 'white', cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >+ {t('mcp.addCustom')}</button>
           </div>
 
           <div style={{
@@ -210,6 +253,33 @@ export default function MCPPage() {
               style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 13, fontFamily: 'inherit' }}
             />
             {loading && <Loader size={13} color="var(--text-muted)" style={{ animation: 'spin 1s linear infinite' }} />}
+          </div>
+
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14,
+            background: allowRiskyTools ? 'rgba(251,191,36,0.08)' : 'var(--bg-card)',
+            border: `1px solid ${allowRiskyTools ? 'rgba(251,191,36,0.25)' : 'var(--border)'}`,
+            borderRadius: 12, padding: '12px 14px', marginTop: 12,
+          }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t('mcp.riskyToolsTitle')}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 2 }}>{t('mcp.riskyToolsDesc')}</div>
+            </div>
+            <button
+              onClick={handleRiskyToggle}
+              style={{
+                width: 48, height: 26, borderRadius: 16, border: '1px solid var(--border)',
+                background: allowRiskyTools ? 'var(--amber)' : 'var(--bg-hover)',
+                cursor: 'pointer', padding: 2, flexShrink: 0,
+              }}
+              title={allowRiskyTools ? t('mcp.riskyToolsEnabled') : t('mcp.riskyToolsDisabled')}
+            >
+              <span style={{
+                display: 'block', width: 20, height: 20, borderRadius: '50%',
+                background: 'white', transform: allowRiskyTools ? 'translateX(22px)' : 'translateX(0)',
+                transition: 'transform 0.15s',
+              }} />
+            </button>
           </div>
 
           <div style={{ display: 'flex', gap: 6, marginTop: 14, flexWrap: 'wrap' }}>
@@ -256,7 +326,7 @@ export default function MCPPage() {
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
-            {servers.map(server => (
+            {[...customServers, ...servers.filter(s => !customServers.find(c => c.id === s.id))].map(server => (
               <MCPCard
                 key={server.id}
                 server={server}
@@ -296,6 +366,104 @@ export default function MCPPage() {
       </div>{/* end Body */}
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+
+      {/* Custom MCP modal */}
+      {customModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
+          onClick={() => !customModal.testing && setCustomModal(null)}
+        >
+          <div onClick={e => e.stopPropagation()} style={{
+            background: 'var(--bg-surface)', border: '1px solid var(--border)',
+            borderRadius: 18, padding: 28, maxWidth: 480, width: '90%', boxShadow: 'var(--shadow-lg)',
+          }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text-primary)', fontWeight: 700 }}>
+              {t('mcp.customTitle')}
+            </h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 18px', lineHeight: 1.6 }}>
+              {t('mcp.customSubtitle')}
+            </p>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>{t('mcp.customName')}</label>
+              <input
+                value={customModal.name}
+                onChange={e => setCustomModal(p => ({ ...p, name: e.target.value }))}
+                placeholder={t('mcp.customNamePlaceholder')}
+                style={inputStyle}
+              />
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>{t('mcp.customUrl')}</label>
+              <input
+                value={customModal.url}
+                onChange={e => setCustomModal(p => ({ ...p, url: e.target.value }))}
+                placeholder="https://mcp.example.com/mcp"
+                style={{ ...inputStyle, fontFamily: 'var(--mono)' }}
+              />
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>{t('mcp.customUrlHint')}</p>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>{t('mcp.customAuth')}</label>
+              <select
+                value={customModal.auth}
+                onChange={e => setCustomModal(p => ({ ...p, auth: e.target.value }))}
+                style={{ ...inputStyle, cursor: 'pointer' }}
+              >
+                <option value="none">{t('mcp.authNone')}</option>
+                <option value="apiKey">{t('mcp.authApiKey')}</option>
+              </select>
+            </div>
+
+            {customModal.auth === 'apiKey' && (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>API Key</label>
+                <input
+                  type="password"
+                  value={customModal.key}
+                  onChange={e => setCustomModal(p => ({ ...p, key: e.target.value }))}
+                  placeholder={t('mcp.customKeyPlaceholder')}
+                  style={{ ...inputStyle, fontFamily: 'var(--mono)' }}
+                />
+              </div>
+            )}
+
+            {customModal.error && (
+              <div style={{
+                fontSize: 12, color: 'var(--red)', background: 'var(--red-bg)',
+                border: '1px solid rgba(248,113,113,0.25)', borderRadius: 8, padding: '8px 12px', marginBottom: 14,
+              }}>⚠ {customModal.error}</div>
+            )}
+
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 18px', lineHeight: 1.6 }}>{t('mcp.customSecurityNote')}</p>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setCustomModal(null)} disabled={customModal.testing} style={{
+                padding: '7px 16px', borderRadius: 8, fontSize: 12,
+                background: 'var(--bg-hover)', border: '1px solid var(--border)',
+                color: 'var(--text-secondary)', cursor: customModal.testing ? 'default' : 'pointer',
+              }}>{t('mcp.cancel')}</button>
+              <button
+                onClick={handleCustomSubmit}
+                disabled={!customModal.url.trim() || customModal.testing}
+                style={{
+                  padding: '7px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                  background: customModal.url.trim() ? 'var(--accent)' : 'var(--bg-hover)',
+                  border: 'none', color: customModal.url.trim() ? 'white' : 'var(--text-muted)',
+                  cursor: customModal.url.trim() && !customModal.testing ? 'pointer' : 'default',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                {customModal.testing
+                  ? <><Loader size={12} style={{ animation: 'spin 1s linear infinite' }} /> {t('mcp.detecting')}</>
+                  : t('mcp.detectAndAdd')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* API Key modal */}
       {keyModal && (
@@ -437,7 +605,7 @@ function MCPCard({ server, connected, onConnect, onDisconnect, onShowGuide, onTo
   const needsKey = !!server.keyStore
   const hasKey = needsKey && !!localStorage.getItem(server.keyStore)
 
-  const toolDefs = getServerToolDefs(server.id)
+  const toolDefs = getServerToolDefs(server)
   // disabledMap[toolName] === true means the tool is turned off
   const [disabledMap, setDisabledMap] = useState(() => {
     const m = {}

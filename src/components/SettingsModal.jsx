@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Palette, User, Zap, Wrench, Sun, Moon, Monitor } from 'lucide-react'
 import { getApiKeys, saveApiKeys, getOllamaBaseUrl, saveOllamaBaseUrl, getOllamaModels, getCompatibleConfig, saveCompatibleConfig } from '../lib/llm'
 import { getSkillHubKey, saveSkillHubKey, getSkillHubUrl, saveSkillHubUrl, testSkillHubConnection } from '../lib/skillhub'
+import { getTheme, applyTheme, getUserProfile, saveUserProfile } from '../lib/preferences'
 import i18n from '../i18n'
 
 const COMPAT_PRESETS = [
@@ -11,31 +12,6 @@ const COMPAT_PRESETS = [
   { label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1' },
   { label: 'Groq', baseUrl: 'https://api.groq.com/openai/v1' },
 ]
-
-
-export function getUserProfile() {
-  return {
-    name: localStorage.getItem('ctx_user_name') || '',
-    role: localStorage.getItem('ctx_user_role') || '',
-  }
-}
-
-export function saveUserProfile({ name, role }) {
-  if (name !== undefined) localStorage.setItem('ctx_user_name', name)
-  if (role !== undefined) localStorage.setItem('ctx_user_role', role)
-}
-
-export function getTheme() {
-  return localStorage.getItem('ctx_theme') || 'system'
-}
-
-export function applyTheme(theme) {
-  localStorage.setItem('ctx_theme', theme)
-  const html = document.documentElement
-  html.classList.remove('theme-dark', 'theme-light')
-  if (theme === 'dark') html.classList.add('theme-dark')
-  else if (theme === 'light') html.classList.add('theme-light')
-}
 
 export default function SettingsModal({ onClose }) {
   const { t } = useTranslation()
@@ -56,27 +32,17 @@ export default function SettingsModal({ onClose }) {
 
   const [activeSection, setActiveSection] = useState('appearance')
   const [theme, setTheme] = useState(getTheme())
-  const [keys, setKeys] = useState({ claude: '', openai: '' })
-  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434')
+  const [keys, setKeys] = useState(() => getApiKeys())
+  const [ollamaUrl, setOllamaUrl] = useState(() => getOllamaBaseUrl())
   const [ollamaStatus, setOllamaStatus] = useState(null)
-  const [profile, setProfile] = useState({ name: '', role: '' })
-  const [braveKey, setBraveKey] = useState('')
-  const [skillhubKey, setSkillhubKey] = useState('')
-  const [skillhubUrl, setSkillhubUrl] = useState('')
+  const [profile, setProfile] = useState(() => getUserProfile())
+  const [braveKey, setBraveKey] = useState(() => localStorage.getItem('ctx_brave_key') || '')
+  const [skillhubKey, setSkillhubKey] = useState(() => getSkillHubKey())
+  const [skillhubUrl, setSkillhubUrl] = useState(() => getSkillHubUrl())
   const [skillhubStatus, setSkillhubStatus] = useState(null)
   const [skillhubMsg, setSkillhubMsg] = useState('')
   const [showSkillhubUrl, setShowSkillhubUrl] = useState(false)
-  const [compatConfig, setCompatConfig] = useState({ key: '', baseUrl: '', models: '', label: '兼容接口' })
-
-  useEffect(() => {
-    setKeys(getApiKeys())
-    setOllamaUrl(getOllamaBaseUrl())
-    setProfile(getUserProfile())
-    setBraveKey(localStorage.getItem('ctx_brave_key') || '')
-    setSkillhubKey(getSkillHubKey())
-    setSkillhubUrl(getSkillHubUrl())
-    setCompatConfig(getCompatibleConfig())
-  }, [])
+  const [compatConfig, setCompatConfig] = useState(() => getCompatibleConfig())
 
   function handleThemeChange(t) {
     setTheme(t)

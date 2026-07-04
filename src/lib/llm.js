@@ -179,7 +179,7 @@ async function streamClaude({ apiKey, model, messages, systemPrompt, signal, onC
             full += json.delta.text
             onChunk(json.delta.text, full)
           }
-        } catch {}
+        } catch { /* ignore malformed stream chunks */ }
       }
     }
     onDone(full)
@@ -236,7 +236,7 @@ async function streamOpenAI({ apiKey, baseUrl = 'https://api.openai.com/v1', mod
             full += text
             onChunk(text, full)
           }
-        } catch {}
+        } catch { /* ignore malformed stream chunks */ }
       }
     }
     onDone(full)
@@ -270,7 +270,7 @@ async function streamOllama({ model, messages, systemPrompt, signal, onChunk, on
       try {
         const err = JSON.parse(body)
         msg = err.error?.message || err.error || msg
-      } catch {}
+      } catch { /* ignore non-JSON Ollama error bodies */ }
       onError(msg)
       return
     }
@@ -296,7 +296,7 @@ async function streamOllama({ model, messages, systemPrompt, signal, onChunk, on
             full += text
             onChunk(text, full)
           }
-        } catch {}
+        } catch { /* ignore malformed stream chunks */ }
       }
     }
     onDone(full)
@@ -445,6 +445,8 @@ type 取值：conclusion（结论）| method（方法）| decision（决策）
             content: i.content.trim(),
             date: today,
             type: i.type || 'conclusion',
+            source: 'auto',
+            createdAt: Date.now(),
           })))
         } catch {
           resolve(null)
@@ -478,6 +480,8 @@ export async function consolidateKnowledge(items = [], model = DEFAULT_MODEL) {
             content: i.content?.trim() || '',
             date: i.date || new Date().toLocaleDateString('zh-CN'),
             type: i.type || 'conclusion',
+            source: 'consolidated',
+            createdAt: Date.now(),
           })).filter(i => i.content)
           resolve(result.length > 0 ? result : items)
         } catch {

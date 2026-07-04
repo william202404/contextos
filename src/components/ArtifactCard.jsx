@@ -5,6 +5,7 @@ import { GitBranch, Network, FileText, Pencil, X, Check, ZoomIn, ZoomOut, Maximi
 import { useTranslation } from 'react-i18next'
 const getMermaid = () => import('../lib/mermaidInit').then(m => m.getMermaid())
 import MarkmapViewer from './MarkmapViewer'
+import { sanitizeSvg } from '../lib/sanitizeSvg'
 
 const TYPE_MAP = {
   flowchart: { Icon: GitBranch,  color: 'var(--accent)', bg: 'var(--accent-glow)' },
@@ -71,13 +72,16 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
     }).then(({ svg }) => {
       if (cancelled || !mermaidRef.current) return
       const host = mermaidRef.current
+      const safeSvg = sanitizeSvg(svg)
+      if (!safeSvg) return
       if (!host.shadowRoot) host.attachShadow({ mode: 'open' })
-      host.shadowRoot.innerHTML = `<style>:host{display:block}svg{max-width:none}</style>${svg}`
+      host.shadowRoot.innerHTML = `<style>:host{display:block}svg{max-width:none}</style>${safeSvg}`
       setMermaidRendered(true)
     }).catch(() => {
       if (!cancelled && mermaidRef.current) {
         if (!mermaidRef.current.shadowRoot) mermaidRef.current.attachShadow({ mode: 'open' })
-        mermaidRef.current.shadowRoot.innerHTML = `<pre style="padding:12px;font-size:11px;color:var(--red)">${artifact.code}</pre>`
+        mermaidRef.current.shadowRoot.innerHTML = '<pre style="padding:12px;font-size:11px;color:var(--red)"></pre>'
+        mermaidRef.current.shadowRoot.querySelector('pre').textContent = artifact.code
       }
     })
     return () => { cancelled = true }
@@ -93,7 +97,7 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
       return mermaid.render(id, artifact.code)
     }).then(({ svg }) => {
       if (!cancelled) {
-        setFullscreenSvg(svg)
+        setFullscreenSvg(sanitizeSvg(svg))
         setTransformFs({ x: 0, y: 0, scale: 1 })
       }
     }).catch(() => { if (!cancelled) setFullscreenSvg('') })
@@ -170,7 +174,7 @@ export default function ArtifactCard({ artifact, onSave, onUpdate, onRequestAiEd
     debounceRef.current = setTimeout(() => {
       getMermaid().then(m =>
         m.render(`edit-${artifact.id.slice(0, 8)}-${Date.now()}`, code)
-      ).then(({ svg }) => setPreviewSvg(svg)).catch(() => setPreviewSvg(''))
+      ).then(({ svg }) => setPreviewSvg(sanitizeSvg(svg))).catch(() => setPreviewSvg(''))
     }, 400)
   }, [artifact.id])
 

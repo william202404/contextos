@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { Bot, Copy, Check, Pencil, RefreshCw } from 'lucide-react'
 import ArtifactCard from './ArtifactCard'
 import { MODELS } from '../lib/llm'
-import { getUserProfile } from './SettingsModal'
+import { getUserProfile } from '../lib/preferences'
 import { useTranslation } from 'react-i18next'
 
 export default function ChatMessage({ message, onSaveArtifact, onArtifactUpdate, onEdit, onRegenerate, onRequestAiEdit }) {
@@ -168,17 +168,40 @@ export default function ChatMessage({ message, onSaveArtifact, onArtifactUpdate,
 
         {/* Tool call receipts */}
         {!isUser && message.toolCalls?.length > 0 && (
-          <div style={{ display: 'flex', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }}>
             {message.toolCalls.map((tc, i) => (
-              <span key={i} style={{
-                fontSize: 10, padding: '2px 8px', borderRadius: 5,
-                background: 'var(--bg-hover)', border: '1px solid var(--border)',
-                color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4,
-              }}>
-                🔧 {tc.serverName} · {tc.toolName}
-              </span>
+              <details key={i} style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                <summary style={{
+                  padding: '3px 8px', borderRadius: 5, cursor: 'pointer',
+                  background: 'var(--bg-hover)', border: '1px solid var(--border)',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}>
+                  🔧 {tc.serverName} · {tc.toolName} · {tc.status || 'completed'}
+                </summary>
+                <div style={{ marginTop: 5, padding: 8, borderRadius: 8, background: 'var(--bg-card)', border: '1px solid var(--border)', lineHeight: 1.5 }}>
+                  <div>{t('chatMessage.toolRisk')}: {tc.risk || 'read'}</div>
+                  {tc.durationMs != null && <div>{t('chatMessage.toolDuration')}: {tc.durationMs}ms</div>}
+                  {tc.input && <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '6px 0 0', fontSize: 10 }}>{JSON.stringify(tc.input, null, 2)}</pre>}
+                  {tc.resultSummary && <div style={{ marginTop: 6 }}>{tc.resultSummary}</div>}
+                </div>
+              </details>
             ))}
           </div>
+        )}
+
+        {isUser && message.contextSnapshot && (
+          <details style={{ marginTop: 6, fontSize: 10, color: 'var(--text-muted)', textAlign: 'right' }}>
+            <summary style={{ cursor: 'pointer', display: 'inline-flex', padding: '2px 7px', borderRadius: 5, background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+              {message.contextSnapshot.skippedHistory ? t('chatMessage.contextSkipped') : t('chatMessage.contextSnapshot')}
+            </summary>
+            <div style={{ marginTop: 5, padding: 8, borderRadius: 8, background: 'var(--bg-card)', border: '1px solid var(--border)', textAlign: 'left', lineHeight: 1.5 }}>
+              <div>{t('chatMessage.contextStatus')}: {message.contextSnapshot.status || message.contextSnapshot.reason || t('chatMessage.none')}</div>
+              <div>{t('chatMessage.contextKnowledge')}: {message.contextSnapshot.knowledge?.length || 0}</div>
+              <div>{t('chatMessage.contextMemory')}: {message.contextSnapshot.memory?.length || 0}</div>
+              <div>{t('chatMessage.contextSkills')}: {(message.contextSnapshot.skills || []).map(s => s.name).join(', ') || t('chatMessage.none')}</div>
+              <div>{t('chatMessage.contextFiles')}: {message.contextSnapshot.files?.length || 0}</div>
+            </div>
+          </details>
         )}
       </div>
     </div>

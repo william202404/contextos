@@ -4,18 +4,19 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { getProject, saveProject, updateProject, updateConversation, getProjectMessages, getConvMessages, getProjectConversations, saveConversation, saveMessage, deleteMessage, deleteProjectMessages, getProjectFiles, saveFile, getConversation, deleteConversation } from '../store/db'
 import { streamMessage, generateProjectMeta, generateKnowledgeUpdate, consolidateKnowledge, MODELS, DEFAULT_MODEL, parseArtifacts, stripArtifacts, stripStreamingArtifacts, getOllamaModels, getCompatibleModels, getApiKeys, getCompatibleConfig } from '../lib/llm'
-import { DEMO_SERVERS, getConnectedServers, getAllServerTools, executeTool } from '../lib/mcp'
+import { DEMO_SERVERS, getConnectedServers, getAllServerTools, executeTool, getAllowRiskyTools } from '../lib/mcp'
 import { getMemory, saveMemory, triggerReflection, calcReflectionScore } from '../lib/memory'
 import { checkTrigger, checkSemanticTrigger } from '../lib/trigger'
 import { detectIntent } from '../lib/intentDetector'
-import { buildProjectContext, describeInjection } from '../lib/contextBuilder'
+import { buildProjectContext, buildContextSnapshot, describeInjection } from '../lib/contextBuilder'
 import { getInstalledSkills, matchSkillsByMessage } from '../lib/skills'
 import { extractFileContent } from '../lib/fileExtractor'
 import ChatMessage from '../components/ChatMessage'
 import FilePanel from '../components/FilePanel'
 import InputBar from '../components/InputBar'
 import CreateProjectModal from '../components/CreateProjectModal'
-import SettingsModal, { getUserProfile } from '../components/SettingsModal'
+import SettingsModal from '../components/SettingsModal'
+import { getUserProfile } from '../lib/preferences'
 import SearchModal from '../components/SearchModal'
 import AIBrief from '../components/AIBrief'
 import { useTranslation } from 'react-i18next'
@@ -46,13 +47,14 @@ export default function ProjectChat() {
   const [matchedSkills, setMatchedSkills] = useState([])
   const [installedSkills, setInstalledSkills] = useState([])
   const [isUnsaved, setIsUnsaved] = useState(false) // true = project exists only in state, not yet in DB
-  const [mcpTools, setMcpTools] = useState([])
+  const [mcpTools] = useState(() => getAllServerTools(getConnectedServers()))
   const [toolStatus, setToolStatus] = useState('')
   const [memory, setMemory] = useState(null)
+  const [memoryNotice, setMemoryNotice] = useState('')
   const [reflectionRunning, setReflectionRunning] = useState(false)
   const [displayCount, setDisplayCount] = useState(50)
   const [ollamaModels, setOllamaModels] = useState({})
-  const [compatibleModels, setCompatibleModels] = useState({})
+  const [compatibleModels] = useState(() => getCompatibleModels())
   const [showVizSuggest, setShowVizSuggest] = useState(false)
   const [selectedVizTypes, setSelectedVizTypes] = useState([])
   const [showSearch, setShowSearch] = useState(false)
@@ -62,9 +64,15 @@ export default function ProjectChat() {
   const [activeSkillId, setActiveSkillId] = useState(null)
   const [lastIntent, setLastIntent] = useState(null)
   const [knowledgeSuggestion, setKnowledgeSuggestion] = useState(false)
+  const [knowledgeTriggerReason, setKnowledgeTriggerReason] = useState('')
+  const [pendingKnowledgeItems, setPendingKnowledgeItems] = useState([])
   const [extractingKnowledge, setExtractingKnowledge] = useState(false)
   const [showSkillPicker, setShowSkillPicker] = useState(false)
   const [projectThreads, setProjectThreads] = useState([])
+  const [contextSnapshot, setContextSnapshot] = useState(null)
+  const [showContextInspector, setShowContextInspector] = useState(false)
+  const [pendingToolApproval, setPendingToolApproval] = useState(null)
+  const [now] = useState(() => Date.now())
 
   const threadId = searchParams.get('thread') || null
 
@@ -76,6 +84,7 @@ export default function ProjectChat() {
   const memoryRef = useRef(null)
   const projectRef = useRef(null)
   const initialMsgCountRef = useRef(0)
+  const toolApprovalRef = useRef(null)
 
   useEffect(() => { messagesRef.current = messages }, [messages])
   useEffect(() => { modelRef.current = model }, [model])
@@ -98,11 +107,8 @@ export default function ProjectChat() {
     getInstalledSkills().then(skills => {
       setInstalledSkills(skills)
     })
-    const connected = getConnectedServers()
-    setMcpTools(getAllServerTools(connected))
     getMemory(id).then(m => { if (m) setMemory(m) })
     getOllamaModels().then(setOllamaModels)
-    setCompatibleModels(getCompatibleModels())
     return () => {
       abortRef.current?.abort()
 
@@ -129,6 +135,7 @@ export default function ProjectChat() {
         }).catch(() => {})
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, threadId])
 
   useEffect(() => {
@@ -142,6 +149,10 @@ export default function ProjectChat() {
     setError('')
     setTriggerShown(false)
     setKnowledgeSuggestion(false)
+    setKnowledgeTriggerReason('')
+    setPendingKnowledgeItems([])
+    setContextSnapshot(null)
+    setShowContextInspector(false)
     setDisplayCount(50)
     const [proj, msgs, fls, threads] = await Promise.all([
       getProject(id),
@@ -167,10 +178,9 @@ export default function ProjectChat() {
       setIsUnsaved(true)
     }
 
-    // 加载技能/模板的 system prompt
-    const convId = searchParams.get('convId')
-    if (convId) {
-      const conv = await getConversation(convId)
+    // 加载线程/模板的 system prompt
+    if (threadId) {
+      const conv = await getConversation(threadId)
       if (conv?.systemPrompt) setSkillSystemPrompt(conv.systemPrompt)
       if (conv?.model) setModel(conv.model)
     }
@@ -183,27 +193,44 @@ export default function ProjectChat() {
   function handleModelChange(modelId) {
     setModel(modelId)
     setProject(prev => prev ? { ...prev, model: modelId } : prev)
-    const convId = searchParams.get('convId')
     if (!project?.isTemp && project?.id) {
       updateProject(project.id, { model: modelId })
     }
-    if (convId) {
-      updateConversation(convId, { model: modelId })
+    if (threadId) {
+      updateConversation(threadId, { model: modelId })
     }
+  }
+
+  function requestToolApproval(approval) {
+    return new Promise(resolve => {
+      toolApprovalRef.current = resolve
+      setPendingToolApproval(approval)
+    })
+  }
+
+  function resolveToolApproval(allowed) {
+    toolApprovalRef.current?.(allowed)
+    toolApprovalRef.current = null
+    setPendingToolApproval(null)
   }
 
   async function handleSend(text) {
     if (!text.trim() || streaming) return
     setError('')
 
+    let currentProject = project
+
     // 第一条消息时才真正写入 DB
     if (isUnsaved && project) {
-      await saveProject(project)
+      const persistedProject = { ...project, isTemp: false, updatedAt: Date.now() }
+      await saveProject(persistedProject)
       setIsUnsaved(false)
-      setProject(prev => prev ? { ...prev, isTemp: false } : prev)
+      setProject(persistedProject)
+      projectRef.current = persistedProject
+      currentProject = persistedProject
     }
 
-    const userMsg = {
+    const userMsgBase = {
       id: crypto.randomUUID(),
       projectId: id,
       ...(threadId && { convId: threadId }),
@@ -211,24 +238,12 @@ export default function ProjectChat() {
       content: text,
       timestamp: Date.now(),
     }
-    await saveMessage(userMsg)
 
     // Auto-title thread from first user message
     if (threadId && messages.length === 0) {
       const title = text.trim().slice(0, 28) + (text.trim().length > 28 ? '…' : '')
       await updateConversation(threadId, { title, updatedAt: Date.now() })
       setProjectThreads(prev => prev.map(t => t.id === threadId ? { ...t, title } : t))
-    }
-
-    const updatedMessages = [...messages, userMsg]
-    setMessages(updatedMessages)
-    // Keep new message visible when paginating
-    setDisplayCount(n => Math.max(n, updatedMessages.length))
-
-    // Check trigger: only show for temp chats (not already a project)
-    if (!triggerShown && project?.isTemp && checkTrigger(updatedMessages, hasFileUploaded)) {
-      setTriggerReason(hasFileUploaded ? 'file' : 'rounds')
-      setTriggerShown(true)
     }
 
     // Auto-match relevant skills from installed pool
@@ -297,10 +312,13 @@ gantt
 
     const activePinnedSkill = installedSkills.find(s => s.id === activeSkillId)
     const basePrompt = activePinnedSkill?.systemPrompt || skillSystemPrompt || '你是一位专业的 AI 助理，正在帮助用户完成工作。'
+    const injectedSkills = [activePinnedSkill, ...currentMatchedSkills].filter(Boolean)
 
-    const projectContext = buildProjectContext(intent, project, memory, currentMatchedSkills, text)
+    const projectContext = buildProjectContext(intent, currentProject, memory, currentMatchedSkills, text)
     const uploadedTextFiles = files.filter(f => f.source === 'upload' && f.content)
     const uploadedImages = files.filter(f => f.source === 'upload' && f.imageData)
+    const nextContextSnapshot = buildContextSnapshot(intent, currentProject, memory, injectedSkills, files, text)
+    setContextSnapshot(nextContextSnapshot)
 
     const fileContext = uploadedTextFiles.length > 0
       ? '\n\n---\n[用户上传的参考文件]\n' + uploadedTextFiles.map(f =>
@@ -311,6 +329,20 @@ gantt
     const systemPrompt = projectContext
       ? `${projectContext}\n\n${basePrompt}${artifactInstruction}${fileContext}`
       : `${basePrompt}${artifactInstruction}${fileContext}`
+
+    const userMsg = { ...userMsgBase, contextSnapshot: nextContextSnapshot }
+    await saveMessage(userMsg)
+
+    const updatedMessages = [...messages, userMsg]
+    setMessages(updatedMessages)
+    // Keep new message visible when paginating
+    setDisplayCount(n => Math.max(n, updatedMessages.length))
+
+    // Check trigger: only show for temp chats (not already a project)
+    if (!triggerShown && currentProject?.isTemp && checkTrigger(updatedMessages, hasFileUploaded)) {
+      setTriggerReason(hasFileUploaded ? 'file' : 'rounds')
+      setTriggerShown(true)
+    }
 
     // Inject artifact content into history so AI can read context
     const messagesForApi = updatedMessages.map((m, idx) => {
@@ -355,8 +387,45 @@ gantt
         const toolDef = mcpTools.find(t => t.name === toolName)
         if (!toolDef) return '未找到对应工具'
         const serverDef = DEMO_SERVERS.find(s => s.id === toolDef._serverId)
-        toolCallsRef.current.push({ serverId: toolDef._serverId, serverName: serverDef?.name || toolDef._serverId, toolName })
-        return executeTool(toolDef._serverId, toolName, toolInput)
+        const serverName = serverDef?.name || toolDef._serverName || toolDef._serverId
+        if (toolDef.risk === 'write' || toolDef.risk === 'high') {
+          if (!getAllowRiskyTools()) {
+            toolCallsRef.current.push({ serverId: toolDef._serverId, serverName, toolName, risk: toolDef.risk, input: toolInput, status: 'blocked', resultSummary: '高风险/写入工具未在 MCP 页面启用' })
+            return '高风险/写入工具当前未启用。请先在 MCP 页面开启风险工具调用。'
+          }
+          const ok = await requestToolApproval({ serverId: toolDef._serverId, serverName, toolName, risk: toolDef.risk, input: toolInput })
+          if (!ok) {
+            toolCallsRef.current.push({ serverId: toolDef._serverId, serverName, toolName, risk: toolDef.risk, input: toolInput, status: 'denied', resultSummary: '用户取消了本次工具调用' })
+            return '用户拒绝了本次工具调用'
+          }
+        }
+        const startedAt = Date.now()
+        try {
+          const result = await executeTool(toolDef._serverId, toolName, toolInput)
+          toolCallsRef.current.push({
+            serverId: toolDef._serverId,
+            serverName,
+            toolName,
+            risk: toolDef.risk || 'read',
+            input: toolInput,
+            status: 'completed',
+            durationMs: Date.now() - startedAt,
+            resultSummary: String(result).replace(/\s+/g, ' ').slice(0, 240),
+          })
+          return result
+        } catch (e) {
+          toolCallsRef.current.push({
+            serverId: toolDef._serverId,
+            serverName,
+            toolName,
+            risk: toolDef.risk || 'read',
+            input: toolInput,
+            status: 'failed',
+            durationMs: Date.now() - startedAt,
+            resultSummary: e.message || '工具调用失败',
+          })
+          throw e
+        }
       },
       onChunk: (_, full) => {
         setToolStatus('')
@@ -384,7 +453,8 @@ gantt
         setStreaming(false)
 
         const now = Date.now()
-        const updated = { ...project, updatedAt: now }
+        const latestProject = projectRef.current || currentProject
+        const updated = { ...latestProject, updatedAt: now }
         await saveProject(updated)
         setProject(updated)
 
@@ -398,19 +468,19 @@ gantt
         // 反思触发：每满 5 条 AI 回复，评分 ≥ 60 则后台触发
         const allMsgs = [...updatedMessages, assistantMsg]
         const aiCount = allMsgs.filter(m => m.role === 'assistant').length
-        if (!project?.isTemp && aiCount > 0 && aiCount % 5 === 0 && !reflectionRunning) {
+        if (!updated.isTemp && aiCount > 0 && aiCount % 5 === 0 && !reflectionRunning) {
           const score = calcReflectionScore(allMsgs)
           if (score >= 60) {
             setReflectionRunning(true)
             triggerReflection(id, allMsgs, model, memory)
-              .then(m => { if (m) setMemory(m) })
+              .then(m => { if (m) { setMemory(m); setMemoryNotice('长期记忆已更新，可在右侧项目上下文查看变更') } })
               .catch(() => {})
               .finally(() => setReflectionRunning(false))
           }
         }
 
         // 第一轮对话完成后自动命名
-        if (allMsgs.length === 2 && (project.name === '新项目' || project.name === '新对话')) {
+        if (allMsgs.length === 2 && (updated.name === '新项目' || updated.name === '新对话')) {
           generateProjectMeta(allMsgs, model)
             .then(meta => {
               if (meta.name && meta.name !== '新项目') {
@@ -424,24 +494,28 @@ gantt
         }
 
         // 可视化提示：非临时项目，首次达到 8 条 AI 回复时提示
-        if (!showVizSuggest && !project?.isTemp && aiCount === 8) {
+        if (!showVizSuggest && !updated.isTemp && aiCount === 8) {
           setShowVizSuggest(true)
         }
 
         // 语义触发（临时对话）：3 轮后检测 AI 回复是否包含高价值内容 → 提示建项目
-        if (!triggerShown && project?.isTemp && allMsgs.length >= 6) {
+        if (!triggerShown && updated.isTemp && allMsgs.length >= 6) {
           checkSemanticTrigger(cleanContent).then(result => {
             if (result.isHighValue) {
               setTriggerReason('semantic')
+              setKnowledgeTriggerReason(result.reason || '')
               setTriggerShown(true)
             }
           }).catch(() => {})
         }
 
         // 语义触发（持久化项目）：每 3 轮检测一次，发现高价值内容 → 提示提取到知识库
-        if (!project?.isTemp && aiCount > 0 && aiCount % 3 === 0 && !knowledgeSuggestion) {
+        if (!updated.isTemp && aiCount > 0 && aiCount % 3 === 0 && !knowledgeSuggestion) {
           checkSemanticTrigger(cleanContent).then(result => {
-            if (result.isHighValue) setKnowledgeSuggestion(true)
+            if (result.isHighValue) {
+              setKnowledgeTriggerReason(result.reason || '')
+              setKnowledgeSuggestion(true)
+            }
           }).catch(() => {})
         }
       },
@@ -469,7 +543,7 @@ gantt
     if (existing.length === 0) return
     const consolidated = await consolidateKnowledge(existing, model)
     if (consolidated && consolidated !== existing) {
-      const updated = { ...project, knowledge: consolidated, updatedAt: Date.now() }
+      const updated = { ...project, knowledge: consolidated.map(k => ({ ...k, source: k.source || 'consolidated', createdAt: k.createdAt || Date.now() })), updatedAt: Date.now() }
       await saveProject(updated)
       setProject(updated)
     }
@@ -482,14 +556,36 @@ gantt
       const existing = Array.isArray(project.knowledge) ? project.knowledge : []
       const newItems = await generateKnowledgeUpdate(messages, existing, model)
       if (newItems) {
-        const updated = { ...project, knowledge: [...existing, ...newItems], updatedAt: Date.now() }
-        await saveProject(updated)
-        setProject(updated)
+        setPendingKnowledgeItems(newItems.map(item => ({ ...item, selected: true })))
       }
     } finally {
       setExtractingKnowledge(false)
-      setKnowledgeSuggestion(false)
     }
+  }
+
+  async function handleAcceptKnowledgePreview() {
+    const accepted = pendingKnowledgeItems
+      .filter(item => item.selected && item.content?.trim())
+      .map((item) => {
+        const cleaned = { ...item, content: item.content.trim(), source: item.source || 'auto', createdAt: item.createdAt || Date.now() }
+        delete cleaned.selected
+        return cleaned
+      })
+    const existing = Array.isArray(project?.knowledge) ? project.knowledge : []
+    if (accepted.length > 0) {
+      const updated = { ...project, knowledge: [...existing, ...accepted], updatedAt: Date.now() }
+      await saveProject(updated)
+      setProject(updated)
+    }
+    setPendingKnowledgeItems([])
+    setKnowledgeSuggestion(false)
+    setKnowledgeTriggerReason('')
+  }
+
+  function handleDismissKnowledgePreview() {
+    setPendingKnowledgeItems([])
+    setKnowledgeSuggestion(false)
+    setKnowledgeTriggerReason('')
   }
 
   async function handleRegenerate(msgId) {
@@ -568,8 +664,11 @@ gantt
     setReflectionRunning(true)
     try {
       const m = await triggerReflection(id, messages, model, memory)
-      if (m) setMemory(m)
-    } catch {}
+      if (m) {
+        setMemory(m)
+        setMemoryNotice('长期记忆已更新，可在右侧项目上下文查看变更')
+      }
+    } catch { /* ignore manual reflection errors */ }
     finally { setReflectionRunning(false) }
   }
 
@@ -579,13 +678,29 @@ gantt
       ...(memory || {}),
       projectId: id,
       content,
-      version: memory?.version || 0,
-      snapshot: memory?.snapshot || '',
+      version: (memory?.version || 0) + 1,
+      snapshot: memory?.content || memory?.snapshot || '',
       updatedAt: now,
       createdAt: memory?.createdAt || now,
     }
     await saveMemory(updated)
     setMemory(updated)
+    setMemoryNotice('长期记忆已手动更新')
+  }
+
+  async function handleMemoryRollback() {
+    if (!memory?.snapshot) return
+    const now = Date.now()
+    const restored = {
+      ...memory,
+      content: memory.snapshot,
+      snapshot: memory.content,
+      version: (memory.version || 0) + 1,
+      updatedAt: now,
+    }
+    await saveMemory(restored)
+    setMemory(restored)
+    setMemoryNotice('已回滚到上一版长期记忆')
   }
 
   async function handleNewNote() {
@@ -714,6 +829,7 @@ gantt
     // Show: project-default skill first, then auto-matched (deduplicated)
     const autoChips = matchedSkills.slice(0, activeSkill ? 2 : 3)
     const hasAnySkill = activeSkill || autoChips.length > 0
+    const latestSnapshot = contextSnapshot || [...messages].reverse().find(m => m.contextSnapshot)?.contextSnapshot
 
     return (
       <div style={{
@@ -789,18 +905,28 @@ gantt
         <div style={{ flex: 1 }} />
 
         {/* Context injection label — shows what context was sent last time */}
-        {lastIntent && !project?.isTemp && (() => {
-          const label = describeInjection(lastIntent, project)
+        {(lastIntent || latestSnapshot) && !project?.isTemp && (() => {
+          const label = latestSnapshot?.skippedHistory ? '仅项目名，已跳过历史' : describeInjection(lastIntent || latestSnapshot?.intent, project)
           if (!label) return null
           return (
-            <span style={{
-              fontSize: 9, color: 'var(--text-muted)',
-              padding: '2px 7px', borderRadius: 4,
-              background: 'var(--bg-card)', border: '1px solid var(--border)',
-              fontFamily: 'var(--font-mono)', letterSpacing: '0.02em', flexShrink: 0,
-            }} title="上次发送时注入的项目上下文">
-              ⊙ {label}
-            </span>
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <button
+                onClick={() => setShowContextInspector(v => !v)}
+                style={{
+                  fontSize: 9, color: 'var(--text-muted)',
+                  padding: '2px 7px', borderRadius: 4,
+                  background: showContextInspector ? 'var(--accent-dim)' : 'var(--bg-card)',
+                  border: `1px solid ${showContextInspector ? 'var(--accent-border)' : 'var(--border)'}`,
+                  fontFamily: 'var(--font-mono)', letterSpacing: '0.02em', cursor: 'pointer',
+                }}
+                title="查看上次发送时注入的项目上下文"
+              >
+                ⊙ {label} ▾
+              </button>
+              {showContextInspector && latestSnapshot && (
+                <ContextInspector snapshot={latestSnapshot} onClose={() => setShowContextInspector(false)} />
+              )}
+            </div>
           )
         })()}
 
@@ -937,7 +1063,7 @@ gantt
           {/* Status badge */}
           {project && !project.isTemp && (() => {
             const isArchived = project.archived
-            const isRecent = project.updatedAt && (Date.now() - project.updatedAt < 7 * 24 * 60 * 60 * 1000)
+            const isRecent = project.updatedAt && (now - project.updatedAt < 7 * 24 * 60 * 60 * 1000)
             const label = isArchived ? t('projectCard.archived') : isRecent ? t('projectCard.active') : t('projectCard.paused')
             const color = isArchived ? 'var(--amber)' : isRecent ? 'var(--green)' : 'var(--amber)'
             const bg = isArchived ? 'rgba(251,191,36,0.08)' : isRecent ? 'rgba(52,211,153,0.08)' : 'rgba(251,191,36,0.08)'
@@ -1248,29 +1374,16 @@ gantt
 
             {/* Knowledge extraction banner */}
             {knowledgeSuggestion && !project?.isTemp && (
-              <div style={{
-                padding: '8px 20px',
-                background: 'var(--bg-card)',
-                borderTop: '1px solid var(--cyan-border)',
-                display: 'flex', alignItems: 'center', gap: 10,
-                fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0,
-              }}>
-                <span style={{ fontSize: 14, flexShrink: 0 }}>🧠</span>
-                <span style={{ flex: 1 }}>AI 刚给出了值得沉淀的结论，提取到项目知识库？</span>
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                  <button
-                    onClick={handleExtractKnowledge}
-                    disabled={extractingKnowledge}
-                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, cursor: extractingKnowledge ? 'default' : 'pointer', background: 'var(--cyan)', color: 'var(--bg-base)', border: 'none', fontWeight: 600, opacity: extractingKnowledge ? 0.6 : 1 }}
-                  >
-                    {extractingKnowledge ? '提取中…' : '提取'}
-                  </button>
-                  <button
-                    onClick={() => setKnowledgeSuggestion(false)}
-                    style={{ fontSize: 11, padding: '4px 9px', borderRadius: 5, cursor: 'pointer', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
-                  >忽略</button>
-                </div>
-              </div>
+              <KnowledgePreviewBanner
+                reason={knowledgeTriggerReason}
+                items={pendingKnowledgeItems}
+                extracting={extractingKnowledge}
+                onGenerate={handleExtractKnowledge}
+                onToggle={(idx) => setPendingKnowledgeItems(prev => prev.map((item, i) => i === idx ? { ...item, selected: !item.selected } : item))}
+                onEdit={(idx, content) => setPendingKnowledgeItems(prev => prev.map((item, i) => i === idx ? { ...item, content } : item))}
+                onAccept={handleAcceptKnowledgePreview}
+                onDismiss={handleDismissKnowledgePreview}
+              />
             )}
 
             {showVizSuggest && (
@@ -1329,6 +1442,9 @@ gantt
               memory={memory}
               reflectionRunning={reflectionRunning}
               onMemoryEdit={handleMemoryEdit}
+              onMemoryRollback={handleMemoryRollback}
+              memoryNotice={memoryNotice}
+              onClearMemoryNotice={() => setMemoryNotice('')}
               onReflect={handleManualReflect}
               onKnowledgeEdit={async (arr) => {
                 const updated = { ...project, knowledge: arr, updatedAt: Date.now() }
@@ -1343,6 +1459,7 @@ gantt
       {/* Modals */}
       {showCreateModal && (
         <CreateProjectModal
+          key={`${suggestedMeta.name || ''}:${suggestedMeta.status || suggestedMeta.summary || ''}:${createLoading}`}
           suggestedName={suggestedMeta.name}
           suggestedSummary={suggestedMeta.status || suggestedMeta.summary}
           loading={createLoading}
@@ -1351,6 +1468,13 @@ gantt
         />
       )}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {pendingToolApproval && (
+        <ToolApprovalModal
+          approval={pendingToolApproval}
+          onAllow={() => resolveToolApproval(true)}
+          onCancel={() => resolveToolApproval(false)}
+        />
+      )}
       {showSearch && (
         <SearchModal
           onClose={() => setShowSearch(false)}
@@ -1368,6 +1492,129 @@ const VIZ_OPTIONS = [
   { id: 'actions',   icon: '✅', label: '行动清单' },
   { id: 'timeline',  icon: '⏱️', label: '时间轴' },
 ]
+
+function ContextInspector({ snapshot, onClose }) {
+  const { t } = useTranslation()
+  const rowStyle = { display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 0', borderTop: '1px solid var(--border)' }
+  return (
+    <div style={{
+      position: 'absolute', right: 0, top: 26, width: 360, zIndex: 80,
+      background: 'var(--bg-surface)', border: '1px solid var(--border)',
+      borderRadius: 12, boxShadow: 'var(--shadow-lg)', padding: 14,
+      color: 'var(--text-secondary)', fontFamily: 'var(--font-body)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{t('contextInspector.title')}</div>
+        <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13 }}>×</button>
+      </div>
+      <div style={{ fontSize: 11, color: snapshot.skippedHistory ? 'var(--amber)' : 'var(--green)', marginBottom: 8 }}>
+        {snapshot.skippedHistory ? t('contextInspector.skipped') : t('contextInspector.injected')}
+      </div>
+
+      <div style={rowStyle}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700 }}>{t('contextInspector.status')}</div>
+        <div style={{ fontSize: 12, lineHeight: 1.55 }}>{snapshot.status || snapshot.reason || t('contextInspector.empty')}</div>
+      </div>
+
+      <div style={rowStyle}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700 }}>{t('contextInspector.knowledge', { count: snapshot.knowledge?.length || 0 })}</div>
+        {snapshot.knowledge?.length ? snapshot.knowledge.slice(0, 5).map(item => (
+          <div key={item.id || item.content} style={{ fontSize: 11, lineHeight: 1.45 }}>- {item.content}</div>
+        )) : <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('contextInspector.empty')}</div>}
+      </div>
+
+      <div style={rowStyle}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700 }}>{t('contextInspector.memory', { count: snapshot.memory?.length || 0 })}</div>
+        {snapshot.memory?.length ? snapshot.memory.slice(0, 4).map((line, i) => (
+          <div key={i} style={{ fontSize: 11, lineHeight: 1.45 }}>{line}</div>
+        )) : <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('contextInspector.empty')}</div>}
+      </div>
+
+      <div style={rowStyle}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700 }}>{t('contextInspector.skills')}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+          {snapshot.skills?.length ? snapshot.skills.map(skill => (
+            <span key={skill.id} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 5, background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>{skill.icon} {skill.name}</span>
+          )) : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('contextInspector.empty')}</span>}
+        </div>
+      </div>
+
+      <div style={rowStyle}>
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700 }}>{t('contextInspector.files')}</div>
+        {snapshot.files?.length ? snapshot.files.map(file => (
+          <div key={file.id} style={{ fontSize: 11 }}>{file.kind === 'image' ? 'image' : `${file.chars} chars`} · {file.name}</div>
+        )) : <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('contextInspector.empty')}</div>}
+      </div>
+    </div>
+  )
+}
+
+function KnowledgePreviewBanner({ reason, items, extracting, onGenerate, onToggle, onEdit, onAccept, onDismiss }) {
+  const { t } = useTranslation()
+  return (
+    <div style={{ padding: '10px 20px', background: 'var(--bg-card)', borderTop: '1px solid var(--cyan-border)', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--text-secondary)' }}>
+        <span style={{ fontSize: 14, flexShrink: 0 }}>🧠</span>
+        <span style={{ flex: 1 }}>
+          {t('knowledgePreview.prompt')}{reason ? ` · ${reason}` : ''}
+        </span>
+        {items.length === 0 ? (
+          <button onClick={onGenerate} disabled={extracting} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, cursor: extracting ? 'default' : 'pointer', background: 'var(--cyan)', color: 'var(--bg-base)', border: 'none', fontWeight: 600, opacity: extracting ? 0.6 : 1 }}>
+            {extracting ? t('knowledgePreview.extracting') : t('knowledgePreview.preview')}
+          </button>
+        ) : (
+          <button onClick={onAccept} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 5, cursor: 'pointer', background: 'var(--cyan)', color: 'var(--bg-base)', border: 'none', fontWeight: 600 }}>
+            {t('knowledgePreview.acceptSelected', { count: items.filter(i => i.selected).length })}
+          </button>
+        )}
+        <button onClick={onDismiss} style={{ fontSize: 11, padding: '4px 9px', borderRadius: 5, cursor: 'pointer', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+          {t('knowledgePreview.dismiss')}
+        </button>
+      </div>
+      {items.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+          {items.map((item, i) => (
+            <div key={item.id || i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <input type="checkbox" checked={!!item.selected} onChange={() => onToggle(i)} style={{ marginTop: 7 }} />
+              <textarea
+                value={item.content}
+                onChange={e => onEdit(i, e.target.value)}
+                rows={1}
+                style={{ flex: 1, resize: 'vertical', minHeight: 30, maxHeight: 90, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 12, padding: '6px 8px', fontFamily: 'inherit', lineHeight: 1.45 }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ToolApprovalModal({ approval, onAllow, onCancel }) {
+  const { t } = useTranslation()
+  const riskColor = approval.risk === 'high' ? 'var(--red)' : 'var(--amber)'
+  const inputText = JSON.stringify(approval.input || {}, null, 2)
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: 460, maxWidth: '100%', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: 'var(--shadow-lg)', padding: 18 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>{t('toolApproval.title')}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 12 }}>
+          {t('toolApproval.desc')}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: '7px 10px', fontSize: 12, marginBottom: 12 }}>
+          <span style={{ color: 'var(--text-muted)' }}>{t('toolApproval.server')}</span><span>{approval.serverName}</span>
+          <span style={{ color: 'var(--text-muted)' }}>{t('toolApproval.tool')}</span><span>{approval.toolName}</span>
+          <span style={{ color: 'var(--text-muted)' }}>{t('toolApproval.risk')}</span><span style={{ color: riskColor, fontWeight: 700 }}>{approval.risk}</span>
+        </div>
+        <pre style={{ maxHeight: 180, overflow: 'auto', margin: 0, padding: 12, borderRadius: 9, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: 11, lineHeight: 1.5 }}>{inputText}</pre>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+          <button onClick={onCancel} style={{ padding: '7px 13px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600 }}>{t('toolApproval.cancel')}</button>
+          <button onClick={onAllow} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: riskColor, color: 'white', cursor: 'pointer', fontWeight: 700 }}>{t('toolApproval.allowOnce')}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function VizSuggestBanner({ selectedTypes, onToggle, onGenerate, onDismiss }) {
   return (

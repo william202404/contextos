@@ -71,7 +71,7 @@ ContextOS 的解法：
 
 ### 📁 文件支持
 
-上传文件，AI 自动提取内容并纳入对话上下文，支持：PDF、Word (.docx)、Excel (.xlsx)、纯文本。
+上传文件，AI 自动提取内容并纳入对话上下文，支持：PDF、Word (.docx)、CSV / 纯文本。Excel 文件当前会提示先另存为 CSV 或纯文本后上传。
 
 ### 📊 图表渲染
 
@@ -145,7 +145,7 @@ API Key 只存本地 localStorage，不经过任何服务器。
 | 存储 | IndexedDB（idb），无后端 |
 | 桌面端 | Electron 42，hiddenInset 标题栏 |
 | 图表 | Mermaid 11 + markmap |
-| 文件解析 | pdfjs-dist、mammoth、xlsx |
+| 文件解析 | pdfjs-dist、mammoth、CSV / 纯文本 |
 | LLM | 前端直连，支持 Claude / GPT-4o / Ollama / 兼容 API |
 
 ---

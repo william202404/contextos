@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { BUILTIN_SKILLS, SKILL_CATEGORIES, getInstalledSkills, installSkillFull, uninstallSkillFull } from '../lib/skills'
 import { searchSkillHub, normalizeSkillHubSkill } from '../lib/skillhub'
 import { getMcpDependencyStatus } from '../lib/mcp'
-import { getUserProfile } from '../components/SettingsModal'
+import { getUserProfile } from '../lib/preferences'
 import SettingsModal from '../components/SettingsModal'
 import AppRail from '../components/AppRail'
+import { useTranslation } from 'react-i18next'
 
 const isElectron = !!window.electronAPI
 
@@ -19,6 +20,7 @@ const BADGE_MAP = {
 }
 
 export default function SkillsPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [activeCategory, setActiveCategory] = useState('全部')
   const [installedSkills, setInstalledSkills] = useState([])
@@ -45,7 +47,11 @@ export default function SkillsPage() {
     }
   }
 
-  useEffect(() => { loadInstalled() }, [])
+  useEffect(() => {
+    let cancelled = false
+    getInstalledSkills().then(skills => { if (!cancelled) setInstalledSkills(skills) })
+    return () => { cancelled = true }
+  }, [])
   useEffect(() => {
     const timer = setTimeout(() => loadSkillHub(search), search ? 500 : 0)
     return () => clearTimeout(timer)
@@ -122,10 +128,10 @@ export default function SkillsPage() {
           }}>
             <div>
               <div style={{ fontFamily: 'var(--font-ui)', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-                技能库
+                {t('skills.pageTitle')}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-                为项目安装专属能力增强器，技能附着在项目上全局生效
+                {t('skills.pageDesc')}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -139,7 +145,7 @@ export default function SkillsPage() {
                 <input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="搜索技能…"
+                  placeholder={t('skills.searchShort')}
                   style={{
                     flex: 1, border: 'none', outline: 'none', background: 'transparent',
                     fontSize: 12, color: 'var(--text-primary)', fontFamily: 'var(--font-body)',
@@ -154,7 +160,7 @@ export default function SkillsPage() {
                 display: 'flex', gap: 2, background: 'var(--bg-card)', border: '1px solid var(--border)',
                 borderRadius: 8, padding: 3,
               }}>
-                {[{ key: 'all', label: '全部' }, { key: 'installed', label: '已安装' }].map(tab => (
+                {[{ key: 'all', label: t('skills.all') }, { key: 'installed', label: t('skills.installed') }].map(tab => (
                   <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
                     padding: '4px 10px', borderRadius: 5,
                     fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600,
@@ -201,12 +207,12 @@ export default function SkillsPage() {
               installedSkills.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)', fontSize: 13 }}>
                   <div style={{ fontSize: 28, marginBottom: 10 }}>📦</div>
-                  <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, marginBottom: 4, color: 'var(--text-secondary)' }}>还没有安装的技能</div>
-                  <div>在市场中找到合适的技能，点击安装即可</div>
+                  <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, marginBottom: 4, color: 'var(--text-secondary)' }}>{t('skills.noInstalled')}</div>
+                  <div>{t('skills.noInstalledMarket')}</div>
                 </div>
               ) : (
                 <div>
-                  <SectionHeader title="已安装" />
+                  <SectionHeader title={t('skills.installed')} />
                   <InstalledList
                     skills={installedSkills}
                     onUninstall={s => handleToggleInstall(s)}
@@ -221,10 +227,10 @@ export default function SkillsPage() {
               search || activeCategory !== '全部' ? (
                 /* 搜索 / 分类过滤模式 */
                 <div>
-                  <SectionHeader title={search ? `搜索结果 · ${filtered.length} 个` : `${activeCategory}`} />
+                  <SectionHeader title={search ? t('skills.searchResults', { count: filtered.length }) : `${activeCategory}`} />
                   {filtered.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: 13 }}>
-                      未找到匹配的技能
+                      {t('skills.noResults')}
                     </div>
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
@@ -242,7 +248,7 @@ export default function SkillsPage() {
                   {/* 已安装区 */}
                   {installedSkills.length > 0 && (
                     <div>
-                      <SectionHeader title="已安装" />
+                      <SectionHeader title={t('skills.installed')} />
                       <InstalledList
                         skills={installedSkills}
                         onUninstall={s => handleToggleInstall(s)}
@@ -254,7 +260,7 @@ export default function SkillsPage() {
                   {/* 核心技能 */}
                   {coreSkills.length > 0 && (
                     <div>
-                      <SectionHeader title="核心技能 · 知识工作者必备" />
+                      <SectionHeader title={t('skills.coreSection')} />
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                         {coreSkills.map(s => (
                           <StoreCard key={s.id} skill={s} installed={false}
@@ -268,7 +274,7 @@ export default function SkillsPage() {
                   {/* ContextOS 专属 */}
                   {contextosSkills.length > 0 && (
                     <div>
-                      <SectionHeader title="ContextOS 专属" />
+                      <SectionHeader title={t('skills.contextosSection')} />
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                         {contextosSkills.map(s => (
                           <StoreCard key={s.id} skill={s} installed={false}
@@ -283,15 +289,15 @@ export default function SkillsPage() {
                         }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                             <div style={{ width: 36, height: 36, borderRadius: 9, background: 'var(--bg-hover)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🔬</div>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 600, padding: '2px 5px', borderRadius: 3, background: 'rgba(126,134,158,0.08)', border: '1px solid rgba(126,134,158,0.2)', color: 'var(--text-muted)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>即将上线</span>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 600, padding: '2px 5px', borderRadius: 3, background: 'rgba(126,134,158,0.08)', border: '1px solid rgba(126,134,158,0.2)', color: 'var(--text-muted)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{t('skills.comingSoon')}</span>
                           </div>
                           <div>
-                            <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>意图识别器</div>
-                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>自动判断对话意图，智能决定注入多少上下文。</div>
+                            <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{t('skills.intentDetector')}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{t('skills.intentDetectorDesc')}</div>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>ContextOS · 意图感知</span>
-                            <button disabled style={{ padding: '5px 12px', borderRadius: 6, fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'default' }}>敬请期待</button>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>{t('skills.intentAware')}</span>
+                            <button disabled style={{ padding: '5px 12px', borderRadius: 6, fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'default' }}>{t('skills.stayTuned')}</button>
                           </div>
                         </div>
                         {/* 自定义技能 */}
@@ -307,8 +313,8 @@ export default function SkillsPage() {
                         >
                           <div style={{ width: 36, height: 36, borderRadius: 9, border: '1px dashed var(--border)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>+</div>
                           <div>
-                            <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 2 }}>创建自定义技能</div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', opacity: 0.7 }}>编写 system prompt，定义专属 AI 角色</div>
+                            <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 2 }}>{t('skills.createCustom')}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', opacity: 0.7 }}>{t('skills.createCustomDesc')}</div>
                           </div>
                         </div>
                       </div>
@@ -318,7 +324,7 @@ export default function SkillsPage() {
                   {/* 更多技能 */}
                   {moreSkills.length > 0 && (
                     <div>
-                      <SectionHeader title="更多技能" />
+                      <SectionHeader title={t('skills.moreSection')} />
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                         {moreSkills.map(s => (
                           <StoreCard key={s.id} skill={s} installed={false}
@@ -331,7 +337,7 @@ export default function SkillsPage() {
                   {/* SkillHub 社区技能 */}
                   {skillhubSkills.filter(s => !installedIds.includes(s.id)).length > 0 && (
                     <div>
-                      <SectionHeader title="SkillHub 社区" />
+                      <SectionHeader title={t('skills.skillhubCommunity')} />
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                         {skillhubSkills.filter(s => !installedIds.includes(s.id)).slice(0, 6).map(s => (
                           <StoreCard key={s.id} skill={s} installed={false}
@@ -357,6 +363,7 @@ export default function SkillsPage() {
 // Skill ↔ MCP dependency badges — shows whether required tools are connected.
 // Clicking a badge jumps to the MCP page to connect the tool.
 function McpDepBadges({ deps }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const status = getMcpDependencyStatus(deps)
   if (!status.length) return null
@@ -366,7 +373,7 @@ function McpDepBadges({ deps }) {
         <button
           key={d.id}
           onClick={e => { e.stopPropagation(); navigate('/mcp') }}
-          title={d.connected ? '依赖工具已连接' : '点击前往 MCP 连接此工具'}
+          title={d.connected ? t('skills.depConnected') : t('skills.depConnectHint')}
           style={{
             display: 'flex', alignItems: 'center', gap: 4,
             fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600,
@@ -376,7 +383,7 @@ function McpDepBadges({ deps }) {
             borderColor: d.connected ? 'rgba(52,211,153,0.25)' : 'rgba(251,191,36,0.25)',
           }}
         >
-          🔌 {d.name} {d.connected ? '✓' : '· 未连接'}
+          🔌 {d.name} {d.connected ? '✓' : t('skills.depNotConnected')}
         </button>
       ))}
     </div>
@@ -395,6 +402,7 @@ function SectionHeader({ title }) {
 }
 
 function InstalledList({ skills, onUninstall, onUse }) {
+  const { t } = useTranslation()
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {skills.map(skill => (
@@ -429,7 +437,7 @@ function InstalledList({ skills, onUninstall, onUse }) {
             }}
               onMouseEnter={e => e.currentTarget.style.background = 'rgba(61,142,245,0.18)'}
               onMouseLeave={e => e.currentTarget.style.background = 'var(--accent-dim)'}
-            >使用</button>
+            >{t('skills.use')}</button>
             <button onClick={() => onUninstall(skill)} style={{
               padding: '6px 12px', borderRadius: 6,
               fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600,
@@ -438,7 +446,7 @@ function InstalledList({ skills, onUninstall, onUse }) {
             }}
               onMouseEnter={e => { e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.borderColor = 'rgba(248,113,113,0.3)' }}
               onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)' }}
-            >卸载</button>
+            >{t('skills.uninstall')}</button>
           </div>
         </div>
       ))}
@@ -453,9 +461,10 @@ function formatCount(n) {
 }
 
 function StoreCard({ skill, installed, installing, onToggle, featured = false }) {
+  const { t } = useTranslation()
   const badge = BADGE_MAP[skill.id]
   // Trust metadata — builtin skills are first-party; SkillHub skills carry their own.
-  const author = skill.author || 'ContextOS 官方'
+  const author = skill.author || t('skills.officialAuthor')
   const version = skill.version || '1.0'
   const isSkillHub = skill.source === 'skillhub'
   return (
@@ -502,7 +511,7 @@ function StoreCard({ skill, installed, installing, onToggle, featured = false })
           {skill.category}{isSkillHub ? ' · SkillHub' : ''}
         </span>
         {installed ? (
-          <button disabled style={{ padding: '5px 12px', borderRadius: 6, fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'default' }}>已安装</button>
+          <button disabled style={{ padding: '5px 12px', borderRadius: 6, fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'default' }}>{t('skills.installed')}</button>
         ) : (
           <button
             onClick={e => onToggle(skill, e)}
@@ -519,7 +528,7 @@ function StoreCard({ skill, installed, installing, onToggle, featured = false })
           >
             {installing
               ? <span style={{ width: 10, height: 10, border: '1.5px solid var(--accent-raw)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-              : '安装'
+              : t('skills.install')
             }
           </button>
         )}

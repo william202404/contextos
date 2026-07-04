@@ -10,6 +10,7 @@ export default function ProjectCard({ project, onDelete, onArchive }) {
   const { t } = useTranslation()
   const [hovered, setHovered] = useState(false)
   const [stats, setStats] = useState({ rounds: null, fileCount: null })
+  const [now] = useState(() => Date.now())
 
   useEffect(() => {
     getProjectStats(project.id).then(s => setStats(s))
@@ -26,7 +27,7 @@ export default function ProjectCard({ project, onDelete, onArchive }) {
     ? project.knowledge.length
     : 0
 
-  const isActive = project.updatedAt && (Date.now() - project.updatedAt < 7 * 24 * 60 * 60 * 1000)
+  const isActive = project.updatedAt && (now - project.updatedAt < 7 * 24 * 60 * 60 * 1000)
 
   return (
     <div

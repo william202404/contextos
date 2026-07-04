@@ -76,7 +76,7 @@ export default function MarkmapViewer({ markdown, minHeight = 320 }) {
   useEffect(() => {
     return () => {
       if (mmRef.current) {
-        try { mmRef.current.destroy?.() } catch {}
+        try { mmRef.current.destroy?.() } catch { /* ignore markmap teardown errors */ }
         mmRef.current = null
       }
     }

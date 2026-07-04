@@ -94,22 +94,7 @@ async function extractWord(file) {
 }
 
 async function extractExcel(file) {
-  try {
-    const XLSX = await import('xlsx')
-    const buffer = await readAsArrayBuffer(file)
-    if (!buffer) return null
-    const wb = XLSX.read(buffer, { type: 'array' })
-    const parts = []
-    for (const sheetName of wb.SheetNames) {
-      const ws = wb.Sheets[sheetName]
-      const csv = XLSX.utils.sheet_to_csv(ws, { blankrows: false })
-      if (csv.trim()) parts.push(`[Sheet: ${sheetName}]\n${csv}`)
-    }
-    return parts.join('\n\n') || null
-  } catch (err) {
-    console.warn('Excel 提取失败:', err)
-    return null
-  }
+  return `文件「${file.name}」是 Excel/表格文件。当前版本已停用本地 Excel 解析，以避免使用存在安全漏洞的解析库；请先另存为 CSV 或纯文本后上传。`
 }
 
 async function extractPPT(file) {

@@ -18,22 +18,31 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false,  // 允许从 file:// 发 HTTP 请求（本地 Ollama/API 直连）
+      webSecurity: true,
     },
   })
 
-  // 注入 CORS 头，允许直连 SkillHub / Glama（代替 Vite 代理）
-  // 给所有响应注入 CORS 头（解决本地 Claude/OpenAI 直连跨域）
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'access-control-allow-origin': ['*'],
-        'access-control-allow-headers': ['*'],
-        'access-control-allow-methods': ['GET, POST, PUT, DELETE, OPTIONS'],
-      },
-    })
-  })
+  // 仅对应用主动直连的已知 API 补 CORS 头，避免把所有外部响应都放开。
+  session.defaultSession.webRequest.onHeadersReceived(
+    {
+      urls: [
+        'https://api.skillhub.cn/*',
+        'https://glama.ai/*',
+        'http://localhost:11434/*',
+        'http://127.0.0.1:11434/*',
+      ],
+    },
+    (details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'access-control-allow-origin': ['*'],
+          'access-control-allow-headers': ['*'],
+          'access-control-allow-methods': ['GET, POST, PUT, DELETE, OPTIONS'],
+        },
+      })
+    }
+  )
 
   // 修改发往本地 Ollama 的请求头，把 Origin 改成同源
   // 这样 Ollama 不会做 CORS 检查，解决 POST/streaming preflight 失败问题
@@ -49,7 +58,7 @@ function createWindow() {
 
   // 阻止在 App 窗口内打开外部链接
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url)
     return { action: 'deny' }
   })
 
