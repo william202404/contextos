@@ -101,7 +101,7 @@ AI 输出 Mermaid 语法，自动渲染流程图；输出 Markdown 大纲，自�
 ### 安装
 
 ```bash
-git clone https://github.com/your-username/contextos.git
+git clone https://github.com/william202404/contextos.git
 cd contextos
 npm install
 ```
@@ -125,11 +125,13 @@ npm run build:mac
 
 ### 配置 API Key
 
-启动后，点击左下角头像 → 设置，填入：
+默认优先使用本机 Ollama。启动前请确认 Ollama 正在运行，并已安装可用于对话的模型；当前默认模型为 `qwen3.6:latest`。
 
-- **Claude API Key**（推荐）：[console.anthropic.com](https://console.anthropic.com)
+启动后，点击左下角头像 → 设置，可按需配置：
+
+- **Ollama**（默认）：默认连接 `http://localhost:11434`
+- **Claude API Key**（可选）：[console.anthropic.com](https://console.anthropic.com)
 - **OpenAI API Key**（可选）：[platform.openai.com](https://platform.openai.com)
-- **Ollama**（本地模型）：默认连接 `http://localhost:11434`
 
 API Key 只存本地 localStorage，不经过任何服务器。
 
@@ -154,11 +156,20 @@ API Key 只存本地 localStorage，不经过任何服务器。
 
 | 模型 | 说明 |
 |------|------|
-| Claude Sonnet 4.6 | 默认，推荐日常使用 |
+| Ollama | 默认，本地模型，完全离线 |
+| qwen3.6:latest | 当前默认 Ollama 对话模型 |
+| Claude Sonnet 4.6 | 可选，需要 Claude API Key |
 | Claude Opus 4.8 | 复杂任务 |
 | GPT-4o | 需要 OpenAI Key |
-| Ollama | 本地模型，完全离线 |
 | 兼容 API | 任意 OpenAI 格式的第三方 API |
+
+---
+
+## 贡献与 AI 协作
+
+本项目由 William Li 主导开发，并在不同阶段使用 AI 编程助手协作实现与审查，包括 Claude Code 和 OpenAI Codex。
+
+GitHub 的 Contributors 页面只统计 Git 提交作者身份；由于本地提交作者统一配置为个人账号，历史提交不会自动区分具体 AI 工具。后续协作建议在提交信息中追加 `Co-authored-by` 或在 PR 描述中注明 AI 协作来源。
 
 ---
 
