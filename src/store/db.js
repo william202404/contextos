@@ -298,7 +298,9 @@ export async function getProjectStats(projectId) {
 
 export async function installSkillData(skill) {
   const db = await getDB()
-  await db.put('skills', { ...skill, installedAt: skill.installedAt || Date.now() })
+  const installedSkill = { ...skill, installedAt: skill.installedAt || Date.now() }
+  await db.put('skills', installedSkill)
+  return installedSkill
 }
 
 export async function getInstalledSkillsDB() {

@@ -17,8 +17,18 @@ export const AGENT_TEMPLATES = [
   },
 ]
 
-export function buildTemplateProject({ template, projectId, now }) {
-  const defaultSkillId = template.skillIds[0]
+function buildAgentConfig(template, defaultSkillId) {
+  return {
+    templateId: template.id,
+    systemPrompt: template.systemPrompt,
+    defaultSkillId,
+    requiredMcpServerIds: template.mcpServerIds,
+    modelRequirements: template.modelRequirements,
+  }
+}
+
+export function buildTemplateProject({ template, projectId, now, installedDefaultSkillId }) {
+  const defaultSkillId = installedDefaultSkillId
   return {
     id: projectId,
     name: template.name,
@@ -28,15 +38,37 @@ export function buildTemplateProject({ template, projectId, now }) {
     icon: template.icon,
     isTemp: false,
     activeSkillId: defaultSkillId,
-    agentConfig: {
-      templateId: template.id,
-      systemPrompt: template.systemPrompt,
-      defaultSkillId,
-      requiredMcpServerIds: template.mcpServerIds,
-      modelRequirements: template.modelRequirements,
-    },
+    agentConfig: buildAgentConfig(template, defaultSkillId),
     createdAt: now,
     updatedAt: now,
+  }
+}
+
+export async function deployAgentTemplate({ template, projectId, now, installSkill, connectServer, saveProject }) {
+  let installedDefaultSkillId
+  for (const skillId of template.skillIds) {
+    const installedSkill = await installSkill(skillId)
+    if (skillId === template.skillIds[0]) installedDefaultSkillId = installedSkill.id
+  }
+  for (const serverId of template.mcpServerIds) await connectServer(serverId)
+
+  const project = buildTemplateProject({ template, projectId, now, installedDefaultSkillId })
+  await saveProject(project)
+  return project
+}
+
+export function normalizeProjectRuntime(project) {
+  if (!project) return project
+  const legacyTemplate = !project.agentConfig && AGENT_TEMPLATES.find(template =>
+    project.model === template.model && project.systemPrompt === template.systemPrompt,
+  )
+  const agentConfig = project.agentConfig || (legacyTemplate && buildAgentConfig(legacyTemplate, legacyTemplate.skillIds[0]))
+  const activeSkillId = project.activeSkillId || agentConfig?.defaultSkillId
+
+  return {
+    ...project,
+    ...(agentConfig ? { agentConfig } : {}),
+    ...(activeSkillId ? { activeSkillId } : {}),
   }
 }
 
@@ -57,18 +89,25 @@ export function resolveSystemPrompt({ activeSkill, threadSystemPrompt, projectAg
   return { prompt: genericDefault, source: 'generic-default' }
 }
 
-export function resolveAgentReadiness({ agentConfig, connectedServerIds = [], modelInfo }) {
+export function resolveAgentReadiness({ agentConfig, connectedServerIds = [], enabledTools = [], modelInfo, modelReady }) {
   const requiredMcpServerIds = agentConfig?.requiredMcpServerIds || []
   const connectedIds = new Set(connectedServerIds.map(server => typeof server === 'string' ? server : server.id))
   const missingMcpServerIds = requiredMcpServerIds.filter(id => !connectedIds.has(id))
+  const enabledServerIds = new Set(enabledTools.map(tool => tool._serverId))
+  const unavailableMcpServerIds = requiredMcpServerIds.filter(id => connectedIds.has(id) && !enabledServerIds.has(id))
   const requirements = agentConfig?.modelRequirements || {}
-  const toolsReady = !requirements.requiresToolSupport
+  const chatReady = modelReady === true
+  const modelSupportsTools = !requirements.requiresToolSupport
     || requirements.supportedProviders?.includes(modelInfo?.provider) === true
+  const toolsReady = chatReady && modelSupportsTools && unavailableMcpServerIds.length === 0
 
   return {
-    chatReady: true,
+    chatReady,
+    modelReady: chatReady,
+    modelSupportsTools,
     toolsReady,
     ready: toolsReady && missingMcpServerIds.length === 0,
     missingMcpServerIds,
+    unavailableMcpServerIds,
   }
 }

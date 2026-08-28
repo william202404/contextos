@@ -279,9 +279,10 @@ export function uninstallSkill(id) {
 
 // Full async install — persists skill data to IndexedDB + updates localStorage IDs
 export async function installSkillFull(skill) {
-  await installSkillData(skill)
+  const installedSkill = await installSkillData(skill)
   const ids = getInstalledSkillIds()
-  if (!ids.includes(skill.id)) _syncIds([...ids, skill.id])
+  if (!ids.includes(installedSkill.id)) _syncIds([...ids, installedSkill.id])
+  return installedSkill
 }
 
 export async function uninstallSkillFull(id) {

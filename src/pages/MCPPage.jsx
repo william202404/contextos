@@ -5,7 +5,7 @@ import AppRail from '../components/AppRail'
 import { DEMO_SERVERS, searchMCPServers, getConnectedServers, saveConnectedServer, removeConnectedServer, getServerToolDefs, isToolEnabled, setToolEnabled, connectCustomServer, getAllowRiskyTools, setAllowRiskyTools } from '../lib/mcp'
 import { BUILTIN_SKILLS, installSkillFull } from '../lib/skills'
 import { saveProject } from '../store/db'
-import { AGENT_TEMPLATES, buildTemplateProject } from '../lib/agentRuntime'
+import { AGENT_TEMPLATES, deployAgentTemplate } from '../lib/agentRuntime'
 import SettingsModal from '../components/SettingsModal'
 import { getUserProfile } from '../lib/preferences'
 import { useTranslation } from 'react-i18next'
@@ -108,21 +108,26 @@ export default function MCPPage() {
     if (deploying) return
     setDeploying(template.id)
     try {
-      for (const skillId of template.skillIds) {
-        const skill = BUILTIN_SKILLS.find(s => s.id === skillId)
-        if (skill) await installSkillFull(skill)
-      }
-      for (const serverId of template.mcpServerIds) {
-        const server = DEMO_SERVERS.find(s => s.id === serverId)
-        if (server) {
-          saveConnectedServer(server)
-          setConnectedIds(prev => new Set([...prev, server.id]))
-        }
-      }
       const projectId = crypto.randomUUID()
       const now = Date.now()
-      await saveProject(buildTemplateProject({ template, projectId, now }))
-      navigate(`/project/${projectId}`)
+      const project = await deployAgentTemplate({
+        template,
+        projectId,
+        now,
+        installSkill: async skillId => {
+          const skill = BUILTIN_SKILLS.find(item => item.id === skillId)
+          if (!skill) throw new Error(`未找到模板技能：${skillId}`)
+          return installSkillFull(skill)
+        },
+        connectServer: async serverId => {
+          const server = DEMO_SERVERS.find(item => item.id === serverId)
+          if (!server) throw new Error(`未找到 MCP 服务：${serverId}`)
+          saveConnectedServer(server)
+          setConnectedIds(prev => new Set([...prev, server.id]))
+        },
+        saveProject,
+      })
+      navigate(`/project/${project.id}`)
     } catch (e) {
       console.error('Deploy failed', e)
     } finally {
