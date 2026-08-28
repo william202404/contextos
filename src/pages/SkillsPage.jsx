@@ -41,7 +41,15 @@ export default function SkillsPage() {
   async function loadSkillHub(q = '') {
     try {
       const results = await searchSkillHub(q, 40)
-      setSkillhubSkills(results.map(normalizeSkillHubSkill))
+      const normalized = results.map(skill => {
+        if (!skill || typeof skill !== 'object' || Array.isArray(skill)) return null
+        try {
+          return normalizeSkillHubSkill(skill)
+        } catch {
+          return null
+        }
+      }).filter(Boolean)
+      setSkillhubSkills(normalized)
     } catch {
       setSkillhubSkills([])
     }

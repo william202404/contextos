@@ -6,6 +6,8 @@
 
 ![ContextOS Overview](./docs/screenshots/overview.png)
 
+最新版本：**v1.1.0 — Agent 模板运行时与 SkillHub 稳定性更新**。详见 [更新日志](./CHANGELOG.md) 和 [v1.1.0 更新说明](./docs/releases/v1.1.0.md)。
+
 ---
 
 ## 为什么需要 ContextOS

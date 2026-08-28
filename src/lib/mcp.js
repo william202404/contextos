@@ -134,6 +134,14 @@ export function getConnectedServers() {
   }
 }
 
+export function getServerCredentialStatuses(servers = getConnectedServers()) {
+  return servers.map(server => {
+    const definition = server.custom ? server : DEMO_SERVERS.find(item => item.id === server.id) || server
+    const ready = !definition.keyStore || definition.keyOptional || !!localStorage.getItem(definition.keyStore)
+    return { id: server.id, ready }
+  })
+}
+
 export function saveConnectedServer(server) {
   const list = getConnectedServers()
   if (!list.find(s => s.id === server.id)) {

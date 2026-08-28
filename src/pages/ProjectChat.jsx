@@ -4,12 +4,13 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { getProject, saveProject, updateProject, updateConversation, getProjectMessages, getConvMessages, getProjectConversations, saveConversation, saveMessage, deleteMessage, deleteProjectMessages, getProjectFiles, saveFile, getConversation, deleteConversation } from '../store/db'
 import { streamMessage, generateProjectMeta, generateKnowledgeUpdate, consolidateKnowledge, MODELS, DEFAULT_MODEL, parseArtifacts, stripArtifacts, stripStreamingArtifacts, getOllamaModels, getCompatibleModels, getApiKeys, getCompatibleConfig } from '../lib/llm'
-import { DEMO_SERVERS, getConnectedServers, getAllServerTools, executeTool, getAllowRiskyTools } from '../lib/mcp'
+import { DEMO_SERVERS, getConnectedServers, getAllServerTools, getServerCredentialStatuses, executeTool, getAllowRiskyTools } from '../lib/mcp'
 import { getMemory, saveMemory, triggerReflection, calcReflectionScore } from '../lib/memory'
 import { checkTrigger, checkSemanticTrigger } from '../lib/trigger'
 import { detectIntent } from '../lib/intentDetector'
 import { buildProjectContext, buildContextSnapshot, describeInjection } from '../lib/contextBuilder'
 import { getInstalledSkills, matchSkillsByMessage } from '../lib/skills'
+import { normalizeProjectRuntime, resolveAgentReadiness, resolveSystemPrompt } from '../lib/agentRuntime'
 import { extractFileContent } from '../lib/fileExtractor'
 import ChatMessage from '../components/ChatMessage'
 import FilePanel from '../components/FilePanel'
@@ -47,7 +48,6 @@ export default function ProjectChat() {
   const [matchedSkills, setMatchedSkills] = useState([])
   const [installedSkills, setInstalledSkills] = useState([])
   const [isUnsaved, setIsUnsaved] = useState(false) // true = project exists only in state, not yet in DB
-  const [mcpTools] = useState(() => getAllServerTools(getConnectedServers()))
   const [toolStatus, setToolStatus] = useState('')
   const [memory, setMemory] = useState(null)
   const [memoryNotice, setMemoryNotice] = useState('')
@@ -75,6 +75,29 @@ export default function ProjectChat() {
   const [now] = useState(() => Date.now())
 
   const threadId = searchParams.get('thread') || null
+  const allModels = { ...MODELS, ...ollamaModels, ...compatibleModels }
+  const keys = getApiKeys()
+  const compatCfg = getCompatibleConfig()
+  const modelInfo = allModels[model]
+  const modelReady = !!modelInfo && (
+    modelInfo.provider === 'claude' ? !!keys.claude
+      : modelInfo.provider === 'openai' ? !!keys.openai
+        : modelInfo.provider === 'compatible' ? !!compatCfg.key
+          : true
+  )
+  const connectedServers = getConnectedServers()
+  const runtimeTools = getAllServerTools(connectedServers)
+  const serverCredentialStatuses = getServerCredentialStatuses(connectedServers)
+  const agentReadiness = project?.agentConfig
+    ? resolveAgentReadiness({
+        agentConfig: project.agentConfig,
+        connectedServerIds: connectedServers.map(server => server.id),
+        enabledTools: runtimeTools,
+        serverCredentialStatuses,
+        modelInfo,
+        modelReady,
+      })
+    : null
 
   const messagesEndRef = useRef(null)
   const abortRef = useRef(null)
@@ -154,6 +177,7 @@ export default function ProjectChat() {
     setContextSnapshot(null)
     setShowContextInspector(false)
     setDisplayCount(50)
+    setSkillSystemPrompt('')
     const [proj, msgs, fls, threads] = await Promise.all([
       getProject(id),
       threadId ? getConvMessages(threadId) : getProjectMessages(id),
@@ -162,9 +186,10 @@ export default function ProjectChat() {
     ])
     setProjectThreads(threads)
     if (proj) {
-      setProject(proj)
-      setModel(proj.model || DEFAULT_MODEL)
-      if (proj.activeSkillId) setActiveSkillId(proj.activeSkillId)
+      const normalizedProject = normalizeProjectRuntime(proj)
+      setProject(normalizedProject)
+      setModel(normalizedProject.model || DEFAULT_MODEL)
+      setActiveSkillId(normalizedProject.activeSkillId || null)
     } else {
       // 不立即写 DB，等用户发第一条消息才真正保存
       const now = Date.now()
@@ -311,7 +336,12 @@ gantt
     setLastIntent(intent)
 
     const activePinnedSkill = installedSkills.find(s => s.id === activeSkillId)
-    const basePrompt = activePinnedSkill?.systemPrompt || skillSystemPrompt || '你是一位专业的 AI 助理，正在帮助用户完成工作。'
+    const { prompt: basePrompt } = resolveSystemPrompt({
+      activeSkill: activePinnedSkill,
+      threadSystemPrompt: skillSystemPrompt,
+      projectAgentConfig: currentProject?.agentConfig,
+      genericDefault: '你是一位专业的 AI 助理，正在帮助用户完成工作。',
+    })
     const injectedSkills = [activePinnedSkill, ...currentMatchedSkills].filter(Boolean)
 
     const projectContext = buildProjectContext(intent, currentProject, memory, currentMatchedSkills, text)
@@ -380,11 +410,11 @@ gantt
       model,
       messages: messagesForApi,
       systemPrompt,
-      tools: mcpTools,
+      tools: runtimeTools,
       signal: controller.signal,
       onToolStatus: (status) => setToolStatus(status),
       onToolCall: async (toolName, toolInput) => {
-        const toolDef = mcpTools.find(t => t.name === toolName)
+        const toolDef = runtimeTools.find(t => t.name === toolName)
         if (!toolDef) return '未找到对应工具'
         const serverDef = DEMO_SERVERS.find(s => s.id === toolDef._serverId)
         const serverName = serverDef?.name || toolDef._serverName || toolDef._serverId
@@ -814,17 +844,6 @@ gantt
   const tokenPercent = Math.min(99, Math.round(estimatedChars / (TOKEN_WINDOW * 2.5) * 100))
 
   function renderSkillBar() {
-    const allModels = { ...MODELS, ...ollamaModels, ...compatibleModels }
-    const keys = getApiKeys()
-    const compatCfg = getCompatibleConfig()
-    const modelInfo = allModels[model]
-    const modelReady = !modelInfo
-      ? true
-      : modelInfo.provider === 'claude' ? !!keys.claude
-      : modelInfo.provider === 'openai' ? !!keys.openai
-      : modelInfo.provider === 'compatible' ? !!compatCfg.key
-      : true
-
     const activeSkill = installedSkills.find(s => s.id === activeSkillId) || null
     // Show: project-default skill first, then auto-matched (deduplicated)
     const autoChips = matchedSkills.slice(0, activeSkill ? 2 : 3)
@@ -932,6 +951,39 @@ gantt
 
         {/* Model selector with API key indicator */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {agentReadiness && (
+            <span
+              style={{
+                fontSize: 9, color: agentReadiness.ready ? 'var(--green)' : 'var(--amber)',
+                padding: '2px 6px', borderRadius: 4,
+                background: agentReadiness.ready ? 'rgba(52,211,153,0.08)' : 'var(--amber-bg)',
+                border: `1px solid ${agentReadiness.ready ? 'rgba(52,211,153,0.25)' : 'var(--amber-border)'}`,
+              }}
+              title={agentReadiness.ready
+                ? '模型与所需 MCP 服务均可执行工具'
+                : !agentReadiness.modelReady
+                  ? '当前模型未配置可用凭证'
+                  : !agentReadiness.modelSupportsTools
+                    ? '当前模型可以聊天，但不支持执行 MCP 工具'
+                    : agentReadiness.missingMcpServerIds.length > 0
+                      ? `缺少 MCP：${agentReadiness.missingMcpServerIds.join('、')}`
+                      : agentReadiness.missingMcpCredentialServerIds.length > 0
+                        ? `MCP 凭证未就绪：${agentReadiness.missingMcpCredentialServerIds.join('、')}`
+                        : `MCP 工具不可用：${agentReadiness.unavailableMcpServerIds.join('、')}`}
+            >
+              {agentReadiness.ready
+                ? 'Agent 就绪'
+                : !agentReadiness.modelReady
+                  ? '模型未就绪'
+                  : !agentReadiness.modelSupportsTools
+                    ? '仅聊天：模型不支持工具'
+                    : agentReadiness.missingMcpServerIds.length > 0
+                      ? `缺少 MCP：${agentReadiness.missingMcpServerIds.join('、')}`
+                      : agentReadiness.missingMcpCredentialServerIds.length > 0
+                        ? `MCP 凭证未就绪：${agentReadiness.missingMcpCredentialServerIds.join('、')}`
+                        : `MCP 工具不可用：${agentReadiness.unavailableMcpServerIds.join('、')}`}
+            </span>
+          )}
           {!modelReady && (
             <span
               onClick={() => setShowSettings(true)}

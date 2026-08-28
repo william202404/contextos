@@ -65,14 +65,47 @@ const CATEGORY_MAP = {
   'creative': '创意创作',
 }
 
-export function normalizeSkillHubSkill(s) {
-  const category = CATEGORY_MAP[s.category] || s.category || '通用'
+const DEFAULT_AUTHOR = '社区作者'
+
+function normalizeSkillHubText(value, fallback = '') {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback
+}
+
+function normalizeSkillHubCount(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+function normalizeSkillHubDependencies(value) {
+  if (!Array.isArray(value)) return []
+  return value.filter(dep => typeof dep === 'string' && dep.trim()).map(dep => dep.trim())
+}
+
+export function normalizeSkillHubAuthor(value, fallback = DEFAULT_AUTHOR) {
+  if (typeof value === 'string') return value.trim() || fallback
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback
+
+  for (const key of ['name', 'certifiedName', 'orgName', 'displayName']) {
+    if (typeof value[key] === 'string' && value[key].trim()) return value[key].trim()
+  }
+
+  return fallback
+}
+
+export function normalizeSkillHubSkill(raw = {}) {
+  const s = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+  const slug = normalizeSkillHubText(s.slug, 'unknown')
+  const name = normalizeSkillHubText(s.displayName) || normalizeSkillHubText(s.name) || slug
+  const categoryKey = normalizeSkillHubText(s.category)
+  const category = CATEGORY_MAP[categoryKey] || categoryKey || '通用'
   // 把技能描述作为对话系统提示词（更适合作为 AI 角色指令）
-  const desc = s.description_zh || s.description || ''
+  const desc = normalizeSkillHubText(s.description_zh) || normalizeSkillHubText(s.description)
+  const version = normalizeSkillHubText(s.version) || normalizeSkillHubText(s.latestVersion)
+  const changelog = normalizeSkillHubText(s.changelog) || normalizeSkillHubText(s.releaseNotes)
+  const labels = s.labels && typeof s.labels === 'object' && !Array.isArray(s.labels) ? s.labels : {}
   return {
-    id: `sh-${s.slug}`,
-    slug: s.slug,
-    name: s.displayName || s.name || s.slug,
+    id: `sh-${slug}`,
+    slug,
+    name,
     icon: '🔮',
     category,
     desc: desc.length > 80 ? desc.slice(0, 78) + '…' : desc,
@@ -81,12 +114,13 @@ export function normalizeSkillHubSkill(s) {
     gradient: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(59,130,246,0.04) 100%)',
     systemPrompt: desc,
     source: 'skillhub',
-    stars: s.stars || 0,
-    downloads: s.downloads || 0,
-    author: s.author || s.owner || s.publisher || '社区作者',
-    version: s.version || s.latestVersion || '',
-    changelog: s.changelog || s.releaseNotes || '',
-    requiresApiKey: s.labels?.requires_api_key === 'true',
-    homepage: s.homepage || `https://skillhub.cn/${s.slug}`,
+    stars: normalizeSkillHubCount(s.stars),
+    downloads: normalizeSkillHubCount(s.downloads),
+    author: normalizeSkillHubAuthor(s.author || s.owner || s.publisher),
+    version,
+    changelog,
+    requiresApiKey: labels.requires_api_key === 'true',
+    mcpDeps: normalizeSkillHubDependencies(s.mcpDeps),
+    homepage: normalizeSkillHubText(s.homepage) || `https://skillhub.cn/${slug}`,
   }
 }
