@@ -67,4 +67,4 @@ Each behavior was tested before its implementation or was revalidated against th
 
 ## Commit
 
-Commit hash will be recorded after the Task 1 changes are committed.
+Implementation commit: `3f2036f`.
