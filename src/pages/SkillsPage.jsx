@@ -42,6 +42,7 @@ export default function SkillsPage() {
     try {
       const results = await searchSkillHub(q, 40)
       const normalized = results.map(skill => {
+        if (!skill || typeof skill !== 'object' || Array.isArray(skill)) return null
         try {
           return normalizeSkillHubSkill(skill)
         } catch {

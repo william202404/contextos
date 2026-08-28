@@ -1,14 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import App from '../src/App'
 
-const { throwingSkillsPage } = vi.hoisted(() => ({
-  throwingSkillsPage: vi.fn(() => {
-    throw new Error('malformed remote card')
-  }),
+const { skillsPageMock } = vi.hoisted(() => ({
+  skillsPageMock: vi.fn(),
 }))
 
-vi.mock('../src/pages/SkillsPage', () => ({ default: throwingSkillsPage }))
+vi.mock('../src/pages/SkillsPage', () => ({ default: skillsPageMock }))
 
 describe('App route error boundary', () => {
   afterEach(() => {
@@ -19,10 +17,18 @@ describe('App route error boundary', () => {
 
   it('shows a recovery screen when the Skills route child fails to render', () => {
     window.location.hash = '#/skills'
+    let shouldFail = true
+    skillsPageMock.mockImplementation(() => {
+      if (shouldFail) throw new Error('malformed remote card')
+      return 'Skills recovered'
+    })
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
     expect(() => render(<App />)).not.toThrow()
     expect(screen.getByRole('alert')).toHaveTextContent('页面加载失败')
-    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
+
+    shouldFail = false
+    fireEvent.click(screen.getByRole('button', { name: '重试' }))
+    expect(screen.getByText('Skills recovered')).toBeInTheDocument()
   })
 })

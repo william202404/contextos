@@ -8,9 +8,9 @@ DONE_WITH_CONCERNS
 
 - `src/lib/skillhub.js`
   - Added `normalizeSkillHubAuthor` to turn string, object, missing, and malformed author values into a trimmed display string with the stable `社区作者` fallback.
-  - Updated `normalizeSkillHubSkill` to use the author boundary.
+  - Updated `normalizeSkillHubSkill` to use the author boundary and normalize all remote card display/count/dependency fields to safe primitives.
 - `src/pages/SkillsPage.jsx`
-  - Normalizes remote cards individually and skips cards that cannot be normalized, so one malformed result does not remove built-ins or valid remote cards.
+  - Normalizes remote cards individually and rejects non-record results, so one malformed result does not remove built-ins or valid remote cards.
 - `src/components/RouteErrorBoundary.jsx`
   - Added a small class error boundary with a recovery screen and retry action.
 - `src/App.jsx`
@@ -20,9 +20,9 @@ DONE_WITH_CONCERNS
 - `test/skillhub.test.js`
   - Added author normalization coverage for the observed object shape, strings, missing values, and malformed values.
 - `test/skills-page.test.jsx`
-  - Added component coverage for object-valued authors, unavailable SkillHub responses, and mixed malformed/valid remote cards.
+  - Added component coverage for object-valued authors, unavailable SkillHub responses, mixed malformed/valid remote cards, and object-valued display/count/dependency fields.
 - `test/app-error-boundary.test.jsx`
-  - Added route recovery coverage for a child render failure.
+  - Added route recovery coverage for a child render failure and retry recovery.
 
 The pre-existing untracked `docs/plans/` directory was left untouched.
 
@@ -68,3 +68,33 @@ Each behavior was tested before its implementation or was revalidated against th
 ## Commit
 
 Implementation commit: `3f2036f`.
+
+## Reviewer remediation (round 1)
+
+The independent review requested protection for non-author remote fields and an explicit retry recovery assertion.
+
+### RED
+
+1. `npm test -- test/skills-page.test.jsx test/app-error-boundary.test.jsx`
+   - Expected failure before the remediation: 2 tests failed. Object-valued `name`/`description`/`category` and object-valued `version`/count/dependency fields reached React and caused `Objects are not valid as a React child`; the valid card could not be found after the malformed card crashed rendering.
+2. `npm test -- test/app-error-boundary.test.jsx` with the retry handler temporarily disabled
+   - Expected failure: the recovery screen remained after clicking `重试`, so `Skills recovered` was absent.
+
+### GREEN
+
+1. `npm test -- test/app-error-boundary.test.jsx test/skills-page.test.jsx`
+   - Passed: 2 files, 6 tests.
+2. The remediation normalizes text, counts, dependencies, labels, and URL values before they enter the Skills state; non-record remote results are discarded before normalization.
+
+### Remediation verification
+
+- `npm test`
+  - Passed: 3 test files, 8 tests.
+- `npm run lint`
+  - Passed with no lint errors.
+- `npm run build`
+  - Passed; Vite produced the production bundle with the existing large-chunk warnings.
+- `git diff --check`
+  - Passed with no whitespace errors.
+
+Remediation commit hash will be recorded in the follow-up report commit.

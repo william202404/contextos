@@ -89,4 +89,58 @@ describe('SkillsPage SkillHub boundary', () => {
     expect(screen.getByText('产品经理助手')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText('Valid Remote')).toBeInTheDocument())
   })
+
+  it('rejects object-valued display fields while keeping built-ins and another valid remote card', async () => {
+    searchSkillHubMock.mockResolvedValue([
+      {
+        slug: 'invalid-display-fields',
+        name: { label: 'Bad Name' },
+        description: { text: 'Bad Description' },
+        category: { label: 'Bad Category' },
+        author: 'Acme AI',
+      },
+      {
+        slug: 'valid-after-invalid',
+        name: 'Valid After Invalid',
+        description: 'A valid remote skill',
+        category: 'productivity',
+        author: 'Acme AI',
+      },
+    ])
+
+    renderSkillsPage()
+
+    expect(screen.getByText('产品经理助手')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Valid After Invalid')).toBeInTheDocument())
+    expect(screen.queryByText('Bad Name')).not.toBeInTheDocument()
+  })
+
+  it('isolates object-valued remote fields from the Skills card renderer', async () => {
+    searchSkillHubMock.mockResolvedValue([
+      {
+        slug: 'invalid-numeric-fields',
+        name: 'Invalid Numeric Fields',
+        description: 'Should not crash the card list',
+        category: 'productivity',
+        author: 'Acme AI',
+        version: { value: '9.0' },
+        changelog: { text: 'invalid' },
+        stars: { value: 10 },
+        downloads: { value: 20 },
+        mcpDeps: { id: 'brave-search' },
+      },
+      {
+        slug: 'valid-after-numeric-invalid',
+        name: 'Valid After Numeric Invalid',
+        description: 'Another valid remote skill',
+        category: 'productivity',
+        author: 'Acme AI',
+      },
+    ])
+
+    renderSkillsPage()
+
+    expect(screen.getByText('产品经理助手')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Valid After Numeric Invalid')).toBeInTheDocument())
+  })
 })
