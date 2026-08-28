@@ -97,4 +97,4 @@ The independent review requested protection for non-author remote fields and an 
 - `git diff --check`
   - Passed with no whitespace errors.
 
-Remediation commit hash will be recorded in the follow-up report commit.
+Remediation commit: `33a83cf`.
