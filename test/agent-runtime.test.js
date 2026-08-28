@@ -7,6 +7,7 @@ import {
   resolveAgentReadiness,
   resolveSystemPrompt,
 } from '../src/lib/agentRuntime'
+import { DEMO_SERVERS, getServerCredentialStatuses } from '../src/lib/mcp'
 
 describe('agent template runtime contract', () => {
   it('creates a research project with its canonical agent config and default skill bound', () => {
@@ -71,6 +72,22 @@ describe('agent template runtime contract', () => {
     })
     expect(ordinary.agentConfig).toBeUndefined()
     expect(ordinary.activeSkillId).toBeUndefined()
+  })
+
+  it('preserves an explicit skill unbind after reload so the project prompt can apply', () => {
+    const project = normalizeProjectRuntime({
+      id: 'unbound-project',
+      activeSkillId: null,
+      agentConfig: { templateId: 'research-agent', systemPrompt: '项目模板提示词', defaultSkillId: 'persisted-research-skill' },
+    })
+
+    expect(project.activeSkillId).toBeNull()
+    expect(resolveSystemPrompt({
+      activeSkill: null,
+      threadSystemPrompt: '',
+      projectAgentConfig: project.agentConfig,
+      genericDefault: '通用提示词',
+    })).toEqual({ prompt: '项目模板提示词', source: 'project-agent' })
   })
 
   it.each([
@@ -174,5 +191,62 @@ describe('agent template runtime contract', () => {
       ready: false,
       unavailableMcpServerIds: ['brave-search'],
     })
+  })
+
+  it('requires mandatory MCP server credentials while allowing optional server credentials', () => {
+    const agentConfig = {
+      requiredMcpServerIds: ['brave-search'],
+      modelRequirements: { requiresToolSupport: true, supportedProviders: ['claude'] },
+    }
+    const missingBraveKey = resolveAgentReadiness({
+      agentConfig,
+      connectedServerIds: ['brave-search'],
+      enabledTools: [{ _serverId: 'brave-search', name: 'web_search' }],
+      serverCredentialStatuses: [{ id: 'brave-search', ready: false }],
+      modelInfo: { provider: 'claude' },
+      modelReady: true,
+    })
+    const optionalGithubCredential = resolveAgentReadiness({
+      agentConfig: { ...agentConfig, requiredMcpServerIds: ['github'] },
+      connectedServerIds: ['github'],
+      enabledTools: [{ _serverId: 'github', name: 'search_repositories' }],
+      serverCredentialStatuses: [{ id: 'github', ready: true }],
+      modelInfo: { provider: 'claude' },
+      modelReady: true,
+    })
+
+    expect(missingBraveKey).toMatchObject({
+      toolsReady: false,
+      ready: false,
+      missingMcpCredentialServerIds: ['brave-search'],
+    })
+    expect(optionalGithubCredential).toMatchObject({ ready: true, missingMcpCredentialServerIds: [] })
+  })
+
+  it('derives required MCP credential status from the connected server definitions', () => {
+    localStorage.clear()
+    const brave = DEMO_SERVERS.find(server => server.id === 'brave-search')
+    const github = DEMO_SERVERS.find(server => server.id === 'github')
+
+    expect(getServerCredentialStatuses([brave, github])).toEqual([
+      { id: 'brave-search', ready: false },
+      { id: 'github', ready: true },
+    ])
+    localStorage.setItem('ctx_brave_key', 'configured-brave-key')
+    expect(getServerCredentialStatuses([brave])).toEqual([{ id: 'brave-search', ready: true }])
+  })
+
+  it('treats an unknown model as not ready instead of tool-ready', () => {
+    expect(resolveAgentReadiness({
+      agentConfig: {
+        requiredMcpServerIds: ['brave-search'],
+        modelRequirements: { requiresToolSupport: true, supportedProviders: ['claude'] },
+      },
+      connectedServerIds: ['brave-search'],
+      enabledTools: [{ _serverId: 'brave-search', name: 'web_search' }],
+      serverCredentialStatuses: [{ id: 'brave-search', ready: true }],
+      modelInfo: undefined,
+      modelReady: false,
+    })).toMatchObject({ chatReady: false, toolsReady: false, ready: false })
   })
 })

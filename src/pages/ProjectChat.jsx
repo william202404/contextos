@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { getProject, saveProject, updateProject, updateConversation, getProjectMessages, getConvMessages, getProjectConversations, saveConversation, saveMessage, deleteMessage, deleteProjectMessages, getProjectFiles, saveFile, getConversation, deleteConversation } from '../store/db'
 import { streamMessage, generateProjectMeta, generateKnowledgeUpdate, consolidateKnowledge, MODELS, DEFAULT_MODEL, parseArtifacts, stripArtifacts, stripStreamingArtifacts, getOllamaModels, getCompatibleModels, getApiKeys, getCompatibleConfig } from '../lib/llm'
-import { DEMO_SERVERS, getConnectedServers, getAllServerTools, executeTool, getAllowRiskyTools } from '../lib/mcp'
+import { DEMO_SERVERS, getConnectedServers, getAllServerTools, getServerCredentialStatuses, executeTool, getAllowRiskyTools } from '../lib/mcp'
 import { getMemory, saveMemory, triggerReflection, calcReflectionScore } from '../lib/memory'
 import { checkTrigger, checkSemanticTrigger } from '../lib/trigger'
 import { detectIntent } from '../lib/intentDetector'
@@ -79,19 +79,21 @@ export default function ProjectChat() {
   const keys = getApiKeys()
   const compatCfg = getCompatibleConfig()
   const modelInfo = allModels[model]
-  const modelReady = !modelInfo
-    ? true
-    : modelInfo.provider === 'claude' ? !!keys.claude
-    : modelInfo.provider === 'openai' ? !!keys.openai
-    : modelInfo.provider === 'compatible' ? !!compatCfg.key
-    : true
+  const modelReady = !!modelInfo && (
+    modelInfo.provider === 'claude' ? !!keys.claude
+      : modelInfo.provider === 'openai' ? !!keys.openai
+        : modelInfo.provider === 'compatible' ? !!compatCfg.key
+          : true
+  )
   const connectedServers = getConnectedServers()
   const runtimeTools = getAllServerTools(connectedServers)
+  const serverCredentialStatuses = getServerCredentialStatuses(connectedServers)
   const agentReadiness = project?.agentConfig
     ? resolveAgentReadiness({
         agentConfig: project.agentConfig,
         connectedServerIds: connectedServers.map(server => server.id),
         enabledTools: runtimeTools,
+        serverCredentialStatuses,
         modelInfo,
         modelReady,
       })
@@ -965,7 +967,9 @@ gantt
                     ? '当前模型可以聊天，但不支持执行 MCP 工具'
                     : agentReadiness.missingMcpServerIds.length > 0
                       ? `缺少 MCP：${agentReadiness.missingMcpServerIds.join('、')}`
-                      : `MCP 工具不可用：${agentReadiness.unavailableMcpServerIds.join('、')}`}
+                      : agentReadiness.missingMcpCredentialServerIds.length > 0
+                        ? `MCP 凭证未就绪：${agentReadiness.missingMcpCredentialServerIds.join('、')}`
+                        : `MCP 工具不可用：${agentReadiness.unavailableMcpServerIds.join('、')}`}
             >
               {agentReadiness.ready
                 ? 'Agent 就绪'
@@ -975,7 +979,9 @@ gantt
                     ? '仅聊天：模型不支持工具'
                     : agentReadiness.missingMcpServerIds.length > 0
                       ? `缺少 MCP：${agentReadiness.missingMcpServerIds.join('、')}`
-                      : `MCP 工具不可用：${agentReadiness.unavailableMcpServerIds.join('、')}`}
+                      : agentReadiness.missingMcpCredentialServerIds.length > 0
+                        ? `MCP 凭证未就绪：${agentReadiness.missingMcpCredentialServerIds.join('、')}`
+                        : `MCP 工具不可用：${agentReadiness.unavailableMcpServerIds.join('、')}`}
             </span>
           )}
           {!modelReady && (

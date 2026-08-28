@@ -63,12 +63,13 @@ export function normalizeProjectRuntime(project) {
     project.model === template.model && project.systemPrompt === template.systemPrompt,
   )
   const agentConfig = project.agentConfig || (legacyTemplate && buildAgentConfig(legacyTemplate, legacyTemplate.skillIds[0]))
-  const activeSkillId = project.activeSkillId || agentConfig?.defaultSkillId
+  const hasActiveSkillId = Object.prototype.hasOwnProperty.call(project, 'activeSkillId')
+  const activeSkillId = hasActiveSkillId ? project.activeSkillId : agentConfig?.defaultSkillId
 
   return {
     ...project,
     ...(agentConfig ? { agentConfig } : {}),
-    ...(activeSkillId ? { activeSkillId } : {}),
+    ...(!hasActiveSkillId && activeSkillId ? { activeSkillId } : {}),
   }
 }
 
@@ -89,17 +90,19 @@ export function resolveSystemPrompt({ activeSkill, threadSystemPrompt, projectAg
   return { prompt: genericDefault, source: 'generic-default' }
 }
 
-export function resolveAgentReadiness({ agentConfig, connectedServerIds = [], enabledTools = [], modelInfo, modelReady }) {
+export function resolveAgentReadiness({ agentConfig, connectedServerIds = [], enabledTools = [], serverCredentialStatuses = [], modelInfo, modelReady }) {
   const requiredMcpServerIds = agentConfig?.requiredMcpServerIds || []
   const connectedIds = new Set(connectedServerIds.map(server => typeof server === 'string' ? server : server.id))
   const missingMcpServerIds = requiredMcpServerIds.filter(id => !connectedIds.has(id))
   const enabledServerIds = new Set(enabledTools.map(tool => tool._serverId))
   const unavailableMcpServerIds = requiredMcpServerIds.filter(id => connectedIds.has(id) && !enabledServerIds.has(id))
+  const credentialReadyByServerId = new Map(serverCredentialStatuses.map(status => [status.id, status.ready]))
+  const missingMcpCredentialServerIds = requiredMcpServerIds.filter(id => connectedIds.has(id) && credentialReadyByServerId.get(id) === false)
   const requirements = agentConfig?.modelRequirements || {}
   const chatReady = modelReady === true
   const modelSupportsTools = !requirements.requiresToolSupport
     || requirements.supportedProviders?.includes(modelInfo?.provider) === true
-  const toolsReady = chatReady && modelSupportsTools && unavailableMcpServerIds.length === 0
+  const toolsReady = chatReady && modelSupportsTools && unavailableMcpServerIds.length === 0 && missingMcpCredentialServerIds.length === 0
 
   return {
     chatReady,
@@ -109,5 +112,6 @@ export function resolveAgentReadiness({ agentConfig, connectedServerIds = [], en
     ready: toolsReady && missingMcpServerIds.length === 0,
     missingMcpServerIds,
     unavailableMcpServerIds,
+    missingMcpCredentialServerIds,
   }
 }

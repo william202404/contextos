@@ -8,7 +8,7 @@ import ProjectChat from '../src/pages/ProjectChat'
 const mocks = vi.hoisted(() => ({
   getProject: vi.fn(), getProjectMessages: vi.fn(), getConvMessages: vi.fn(), getProjectFiles: vi.fn(), getProjectConversations: vi.fn(),
   getConversation: vi.fn(), saveMessage: vi.fn(), saveProject: vi.fn(), updateProject: vi.fn(), updateConversation: vi.fn(),
-  getConnectedServers: vi.fn(), getAllServerTools: vi.fn(), streamMessage: vi.fn(), getInstalledSkills: vi.fn(), getApiKeys: vi.fn(),
+  getConnectedServers: vi.fn(), getAllServerTools: vi.fn(), getServerCredentialStatuses: vi.fn(), streamMessage: vi.fn(), getInstalledSkills: vi.fn(), getApiKeys: vi.fn(),
 }))
 
 vi.mock('../src/store/db', () => ({
@@ -29,7 +29,8 @@ vi.mock('../src/lib/llm', () => ({
 
 vi.mock('../src/lib/mcp', () => ({
   DEMO_SERVERS: [{ id: 'brave-search', name: 'Brave Search' }], getConnectedServers: mocks.getConnectedServers,
-  getAllServerTools: mocks.getAllServerTools, executeTool: vi.fn(), getAllowRiskyTools: () => false,
+  getAllServerTools: mocks.getAllServerTools, getServerCredentialStatuses: mocks.getServerCredentialStatuses,
+  executeTool: vi.fn(), getAllowRiskyTools: () => false,
 }))
 vi.mock('../src/lib/memory', () => ({ getMemory: vi.fn().mockResolvedValue(null), saveMemory: vi.fn(), triggerReflection: vi.fn(), calcReflectionScore: () => 0 }))
 vi.mock('../src/lib/trigger', () => ({ checkTrigger: () => false, checkSemanticTrigger: vi.fn().mockResolvedValue({ isHighValue: false }) }))
@@ -59,11 +60,13 @@ function chatTree() {
 describe('ProjectChat agent runtime seam', () => {
   let connectedServers
   let availableTools
+  let serverCredentialStatuses
 
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn()
     connectedServers = [{ id: 'brave-search', name: 'Brave Search' }]
     availableTools = [{ _serverId: 'brave-search', name: 'web_search', risk: 'read' }]
+    serverCredentialStatuses = [{ id: 'brave-search', ready: true }]
     mocks.getProject.mockResolvedValue({
       id: 'project-1', name: '研究项目', knowledge: [], model: 'claude-sonnet-4-6', icon: '🔬', isTemp: false,
       agentConfig: {
@@ -79,6 +82,7 @@ describe('ProjectChat agent runtime seam', () => {
     mocks.getInstalledSkills.mockResolvedValue([{ id: 'persisted-research-skill', systemPrompt: '已安装技能提示词', name: '研究技能', icon: '🔬' }])
     mocks.getConnectedServers.mockImplementation(() => connectedServers)
     mocks.getAllServerTools.mockImplementation(() => availableTools)
+    mocks.getServerCredentialStatuses.mockImplementation(() => serverCredentialStatuses)
     mocks.getApiKeys.mockReturnValue({ claude: 'configured-key', openai: '' })
     mocks.saveMessage.mockResolvedValue(undefined)
     mocks.saveProject.mockResolvedValue(undefined)
@@ -122,6 +126,46 @@ describe('ProjectChat agent runtime seam', () => {
     render(chatTree())
 
     await waitFor(() => expect(screen.getByText('MCP 工具不可用：brave-search')).toBeInTheDocument())
+    expect(screen.queryByText('Agent 就绪')).not.toBeInTheDocument()
+  })
+
+  it('does not show full readiness when an enabled required Brave server lacks its mandatory key', async () => {
+    serverCredentialStatuses = [{ id: 'brave-search', ready: false }]
+    render(chatTree())
+
+    await waitFor(() => expect(screen.getByText('MCP 凭证未就绪：brave-search')).toBeInTheDocument())
+    expect(screen.queryByText('Agent 就绪')).not.toBeInTheDocument()
+  })
+
+  it('keeps an explicitly unbound default skill unbound after reload and uses the project prompt', async () => {
+    mocks.getProject.mockResolvedValue({
+      id: 'project-1', name: '研究项目', knowledge: [], model: 'claude-sonnet-4-6', icon: '🔬', isTemp: false,
+      activeSkillId: null,
+      agentConfig: {
+        templateId: 'research-agent', systemPrompt: '项目模板提示词', defaultSkillId: 'persisted-research-skill',
+        requiredMcpServerIds: ['brave-search'], modelRequirements: { requiresToolSupport: true, supportedProviders: ['claude'] },
+      },
+    })
+    render(chatTree())
+
+    await waitFor(() => expect(screen.getByText('Agent 就绪')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('发送测试消息'))
+    await waitFor(() => expect(mocks.streamMessage).toHaveBeenCalledTimes(1))
+    expect(mocks.streamMessage.mock.calls[0][0].systemPrompt).toContain('项目模板提示词')
+    expect(mocks.streamMessage.mock.calls[0][0].systemPrompt).not.toContain('已安装技能提示词')
+  })
+
+  it('keeps an unknown persisted model safely loaded but not ready', async () => {
+    mocks.getProject.mockResolvedValue({
+      id: 'project-1', name: '研究项目', knowledge: [], model: 'removed-model', icon: '🔬', isTemp: false,
+      agentConfig: {
+        templateId: 'research-agent', systemPrompt: '项目模板提示词', defaultSkillId: 'persisted-research-skill',
+        requiredMcpServerIds: ['brave-search'], modelRequirements: { requiresToolSupport: true, supportedProviders: ['claude'] },
+      },
+    })
+    render(chatTree())
+
+    await waitFor(() => expect(screen.getByText('模型未就绪')).toBeInTheDocument())
     expect(screen.queryByText('Agent 就绪')).not.toBeInTheDocument()
   })
 })
