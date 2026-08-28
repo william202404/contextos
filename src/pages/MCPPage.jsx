@@ -5,7 +5,7 @@ import AppRail from '../components/AppRail'
 import { DEMO_SERVERS, searchMCPServers, getConnectedServers, saveConnectedServer, removeConnectedServer, getServerToolDefs, isToolEnabled, setToolEnabled, connectCustomServer, getAllowRiskyTools, setAllowRiskyTools } from '../lib/mcp'
 import { BUILTIN_SKILLS, installSkillFull } from '../lib/skills'
 import { saveProject } from '../store/db'
-import { DEFAULT_MODEL } from '../lib/llm'
+import { AGENT_TEMPLATES, buildTemplateProject } from '../lib/agentRuntime'
 import SettingsModal from '../components/SettingsModal'
 import { getUserProfile } from '../lib/preferences'
 import { useTranslation } from 'react-i18next'
@@ -19,23 +19,6 @@ const RISK_META = {
   write: { color: 'var(--amber)', bg: 'rgba(251,191,36,0.10)', border: 'rgba(251,191,36,0.25)' },
   high:  { color: 'var(--red)',   bg: 'rgba(248,113,113,0.10)', border: 'rgba(248,113,113,0.25)' },
 }
-
-const AGENT_TEMPLATES = [
-  {
-    id: 'research-agent', name: 'AI 研究员', icon: '🔬',
-    desc: '联网搜索 + 摘要 + 知识整理，自动完成深度研究任务',
-    skillIds: ['literature-distiller'], mcpServerIds: ['brave-search'],
-    tags: ['研究', '内容'], model: 'claude-sonnet-4-6',
-    systemPrompt: '你是一位专业的 AI 研究助手，擅长通过搜索工具获取最新信息，并进行分析、总结和知识整理。',
-  },
-  {
-    id: 'code-assistant', name: '代码助手', icon: '💻',
-    desc: '搜索 GitHub 仓库 + 读取代码文件，在真实代码库中提供帮助',
-    skillIds: ['decision-framework'], mcpServerIds: ['github'],
-    tags: ['开发', '工程'], model: 'claude-opus-4-8',
-    systemPrompt: '你是一位经验丰富的软件工程师，擅长使用 GitHub 工具搜索和分析代码，提供专业的编程建议。',
-  },
-]
 
 export default function MCPPage() {
   const { t } = useTranslation()
@@ -138,13 +121,7 @@ export default function MCPPage() {
       }
       const projectId = crypto.randomUUID()
       const now = Date.now()
-      await saveProject({
-        id: projectId, name: template.name, knowledge: [],
-        status: '', model: template.model || DEFAULT_MODEL,
-        icon: template.icon, isTemp: false,
-        systemPrompt: template.systemPrompt,
-        createdAt: now, updatedAt: now,
-      })
+      await saveProject(buildTemplateProject({ template, projectId, now }))
       navigate(`/project/${projectId}`)
     } catch (e) {
       console.error('Deploy failed', e)
