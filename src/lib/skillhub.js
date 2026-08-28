@@ -65,7 +65,20 @@ const CATEGORY_MAP = {
   'creative': '创意创作',
 }
 
-export function normalizeSkillHubSkill(s) {
+const DEFAULT_AUTHOR = '社区作者'
+
+export function normalizeSkillHubAuthor(value, fallback = DEFAULT_AUTHOR) {
+  if (typeof value === 'string') return value.trim() || fallback
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback
+
+  for (const key of ['name', 'certifiedName', 'orgName', 'displayName']) {
+    if (typeof value[key] === 'string' && value[key].trim()) return value[key].trim()
+  }
+
+  return fallback
+}
+
+export function normalizeSkillHubSkill(s = {}) {
   const category = CATEGORY_MAP[s.category] || s.category || '通用'
   // 把技能描述作为对话系统提示词（更适合作为 AI 角色指令）
   const desc = s.description_zh || s.description || ''
@@ -83,7 +96,7 @@ export function normalizeSkillHubSkill(s) {
     source: 'skillhub',
     stars: s.stars || 0,
     downloads: s.downloads || 0,
-    author: s.author || s.owner || s.publisher || '社区作者',
+    author: normalizeSkillHubAuthor(s.author || s.owner || s.publisher),
     version: s.version || s.latestVersion || '',
     changelog: s.changelog || s.releaseNotes || '',
     requiresApiKey: s.labels?.requires_api_key === 'true',

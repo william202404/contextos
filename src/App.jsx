@@ -3,6 +3,7 @@ import Overview from './pages/Overview'
 import ProjectChat from './pages/ProjectChat'
 import SkillsPage from './pages/SkillsPage'
 import MCPPage from './pages/MCPPage'
+import RouteErrorBoundary from './components/RouteErrorBoundary'
 
 export default function App() {
   return (
@@ -10,7 +11,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Overview />} />
         <Route path="/project/:id" element={<ProjectChat />} />
-        <Route path="/skills" element={<SkillsPage />} />
+        <Route path="/skills" element={<RouteErrorBoundary><SkillsPage /></RouteErrorBoundary>} />
         <Route path="/mcp" element={<MCPPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
